@@ -573,10 +573,12 @@ void LocalStore::checkDerivationOutputs(const StorePath & drvPath, const Derivat
             }
             StorePath path = makeOutputPath(i.first, *h, drvName);
             check(path, i.second.path, i.first);
-        } else {
-            if (i.second.hash == "") {
-                throw Error("Fixed output derivation needs hash");
+        } else if (i.second.hash == "") {
+            if (i.second.path) {
+                throw Error("Floating CA derivation has non-empty path '%s' for output '%s'",
+                    printStorePath(*i.second.path), i.first);
             }
+        } else {
             bool recursive; Hash h;
             i.second.parseHashInfo(recursive, h);
             StorePath path = makeFixedOutputPath(recursive, h, drvName);
@@ -620,6 +622,11 @@ uint64_t LocalStore::addValidPath(State & state,
         if (checkOutputs) checkDerivationOutputs(info.path, drv);
 
         for (auto & i : drv.outputs) {
+            // Cannot write down CA derivation hashes because we don't know what
+            // their output hash are unless built.
+            if (i.second.hashAlgo != "" && i.second.hash == "")
+                continue;
+
             state.stmtAddDerivationOutput.use()
                 (id)
                 (i.first)

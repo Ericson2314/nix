@@ -14,10 +14,10 @@ namespace nix {
 
 struct DerivationOutput
 {
-    StorePath path;
+    std::optional<StorePath> path;
     std::string hashAlgo; /* hash used for expected hash computation */
     std::string hash; /* expected hash, may be null */
-    DerivationOutput(StorePath && path, std::string && hashAlgo, std::string && hash)
+    DerivationOutput(std::optional<StorePath> && path, std::string && hashAlgo, std::string && hash)
         : path(std::move(path))
         , hashAlgo(std::move(hashAlgo))
         , hash(std::move(hash))
@@ -46,6 +46,7 @@ enum DerivationTypeAxis : uint8_t {
 };
 enum DerivationType : uint8_t {
     DtRegular = 0b0000000,
+    DtCAFloating = 0b10000000,
     DtCAFixed = 0b11100000,
 };
 
@@ -64,15 +65,12 @@ struct BasicDerivation
 
     /* Return the path corresponding to the output identifier `id' in
        the given derivation. */
-    const StorePath & findOutput(const std::string & id) const;
+    const std::optional<StorePath> & findOutput(const std::string & id) const;
 
     bool isBuiltin() const;
 
     /* Return true iff this is a fixed-output derivation. */
     DerivationType type() const;
-
-    /* Return the output paths of a derivation. */
-    StorePathSet outputPaths() const;
 
 };
 

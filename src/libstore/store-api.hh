@@ -236,6 +236,12 @@ struct BuildResult
        was repeated). */
     time_t startTime = 0, stopTime = 0;
 
+    /* Map of output paths for each output. This provides no new info for
+       regular and fixed-output CA derivations, but does for floating CA
+       derivations, as those outputs' content hashes (and thus store paths) are
+       not known a priori. */
+    std::map<string, StorePath> outputPaths;
+
     bool success() {
         return status == Built || status == Substituted || status == AlreadyValid;
     }
@@ -392,6 +398,26 @@ public:
     virtual StorePathSet queryValidPaths(const StorePathSet & paths,
         SubstituteFlag maybeSubstitute = NoSubstitute);
 
+    /* Query which of the given CA derivations' outputs have a known mapping,
+       and whether or not that path is valid. Optionally, try to substitute
+       missing paths. */
+    virtual std::map<
+        StorePath, // drv
+        std::pair<
+            StorePath, // resolved DRV
+            std::map<
+                std::string, // output
+                std::pair<
+                    StorePath, // output path
+                    bool  // is valid
+                >
+            >
+        >
+    >
+    queryValidCAOutputs(
+        const std::map<StorePath, std::set<std::string>> & drvsOutputs,
+        SubstituteFlag maybeSubstitute = NoSubstitute);
+
     /* Query the set of all valid paths. Note that for some store
        backends, the name part of store paths may be omitted
        (i.e. you'll get /nix/store/<hash> rather than
@@ -446,6 +472,18 @@ public:
        info, it's omitted from the resulting ‘infos’ map. */
     virtual void querySubstitutablePathInfos(const StorePathSet & paths,
         SubstitutablePathInfos & infos) { return; };
+
+    /* Query derivation outputs. Useful for derivations like floating CA
+       derivations where the output paths are not known statically but computed
+       from the build products.
+
+       Having optional values rather than an optional map allows for outputs to
+       be known/constrained on an output-by-output basis. This may be useful
+       when GCing some outputs but not others, or substituting some outputs but
+       not others.
+     */
+    virtual std::map<string, std::optional<StorePath>> queryDerivationOutputPaths(
+        const Derivation drv);
 
     /* Import a path into the store. */
     virtual void addToStore(const ValidPathInfo & info, Source & narSource,
@@ -608,9 +646,61 @@ public:
 
     /* Given a set of paths that are to be built, return the set of
        derivations that will be built, and the set of output paths
-       that will be substituted. */
-    virtual void queryMissing(const std::vector<StorePathWithOutputs> & targets,
-        StorePathSet & willBuild, StorePathSet & willSubstitute, StorePathSet & unknown,
+       that will be substituted.
+
+       Not advised to use with floating CA derivations, as it will only build or
+       substitue which have output mappings. (e.g. were built before but then
+       garbage collected.) The others can't even go in `unknown` as we don't
+       know the store paths!
+     */
+    virtual void queryMissing(
+        const std::vector<StorePathWithOutputs> & targets,
+        // Build not needed, but must remember mapping for coherence
+        std::map<
+            StorePath, // drv
+            std::pair<
+                StorePath, // resolved drv
+                std::map<
+                    std::string, // output
+                    StorePath // output path
+                >
+            >
+        > & willConstrain,
+        StorePathSet & willBuild, StorePathSet & willSubstitute,
+        StorePathSet & unknown, StorePathSet & unknownCADrv,
+        unsigned long long & downloadSize, unsigned long long & narSize);
+
+    /* Like `queryMissing` but specifically for CA derivations, especially floating ones.
+
+       The FixedOutpat maps are for CA derivations whose outputs are fixed,
+       either by the deriation itself, or more interestingly, by the a mapping
+       from a another build or substitution. That could be a previous build, or
+       another build being requested. For example. if one is building CA DRVs
+       for GCC and Hello, one needs the Hello build to use the same GCC mapping
+       as the GCC build even if Hello doesn't reference GCC in any of its
+       outputs.
+
+       That floating output ones are likewise just those floating CA derivations
+       whose outputs are unconstrained by other builds or the database.
+     */
+    virtual void queryMissingCA(
+        const std::vector<StorePathWithOutputs> & targets,
+        // Build not needed, but must remember mapping for coherence
+        std::map<
+            StorePath, // drv
+            std::pair<
+                StorePath, // resolved drv
+                std::map<
+                    std::string, // output
+                    StorePath // output path
+                >
+            >
+        > & willConstrain,
+        std::map<StorePath, std::pair<StorePath, std::map<std::string, StorePath>>> & willBuildFixedOutput,
+        std::map<StorePath, std::pair<StorePath, std::map<std::string, StorePath>>> & willSubstituteFixedOutput,
+        std::map<StorePath, std::set<std::string>> & willBuildFloatingOutput,
+        std::map<StorePath, std::set<std::string>> & willSubstituteFloatingOutput,
+        StorePathSet & unknownDrv,
         unsigned long long & downloadSize, unsigned long long & narSize);
 
     /* Sort a set of paths topologically under the references

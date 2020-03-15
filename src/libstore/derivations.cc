@@ -45,7 +45,12 @@ BasicDerivation::BasicDerivation(const BasicDerivation & other)
 {
     for (auto & i : other.outputs)
         outputs.insert_or_assign(i.first,
-            DerivationOutput(i.second.path.clone(), std::string(i.second.hashAlgo), std::string(i.second.hash)));
+            DerivationOutput(
+                i.second.path
+                  ? std::optional<StorePath>((*i.second.path).clone())
+                  : std::optional<StorePath>(),
+                std::string(i.second.hashAlgo),
+                std::string(i.second.hash)));
     for (auto & i : other.inputSrcs)
         inputSrcs.insert(i.clone());
 }
@@ -59,7 +64,7 @@ Derivation::Derivation(const Derivation & other)
 }
 
 
-const StorePath & BasicDerivation::findOutput(const string & id) const
+const std::optional<StorePath> & BasicDerivation::findOutput(const string & id) const
 {
     auto i = outputs.find(id);
     if (i == outputs.end())
@@ -284,7 +289,7 @@ string Derivation::unparse(const Store & store, bool maskOutputs,
     for (auto & i : outputs) {
         if (first) first = false; else s += ',';
         s += '('; printUnquotedString(s, i.first);
-        s += ','; printUnquotedString(s, maskOutputs ? "" : store.printStorePath(i.second.path));
+        s += ','; printUnquotedString(s, i.second.path || maskOutputs ? "" : store.printStorePath(*i.second.path));
         s += ','; printUnquotedString(s, i.second.hashAlgo);
         s += ','; printUnquotedString(s, i.second.hash);
         s += ')';
@@ -342,24 +347,26 @@ DerivationType BasicDerivation::type() const
 {
     if (outputs.size() == 1 &&
         outputs.begin()->first == "out" &&
-        outputs.begin()->second.hash != "")
+        outputs.begin()->second.hash != "" &&
+        !outputs.begin()->second.path)
     {
         return DtCAFixed;
     }
 
     auto const algo = outputs.begin()->second.hashAlgo;
-    if (algo != "") {
-        throw Error("Invalid mix of CA and regular outputs");
-    }
+    auto const type = algo == "" ? DtRegular : DtCAFloating;
     for (auto & i : outputs) {
         if (i.second.hash != "") {
             throw Error("Non-fixed-output derivation has fixed output");
         }
-        if (i.second.hashAlgo != "") {
+        if (i.second.hashAlgo != algo) {
             throw Error("Invalid mix of CA and regular outputs");
         }
+        if ((algo == "") == (bool)i.second.path) {
+            throw Error("Path must be blank if and only if floating CA drv");
+        }
     }
-    return DtRegular;
+    return type;
 }
 
 
@@ -395,8 +402,10 @@ Hash hashDerivationModulo(Store & store, const Derivation & drv, bool maskOutput
         return hashString(htSHA256, "fixed:out:"
             + i->second.hashAlgo + ":"
             + i->second.hash + ":"
-            + store.printStorePath(i->second.path));
+            + store.printStorePath(*i->second.path));
     }
+    case DtCAFloating:
+        throw Error("Floating CA derivations are unimplemented");
     default:
         break;
     }
@@ -432,15 +441,6 @@ bool wantOutput(const string & output, const std::set<string> & wanted)
 }
 
 
-StorePathSet BasicDerivation::outputPaths() const
-{
-    StorePathSet paths;
-    for (auto & i : outputs)
-        paths.insert(i.second.path.clone());
-    return paths;
-}
-
-
 Source & readDerivation(Source & in, const Store & store, BasicDerivation & drv)
 {
     drv.outputs.clear();
@@ -471,8 +471,15 @@ Source & readDerivation(Source & in, const Store & store, BasicDerivation & drv)
 void writeDerivation(Sink & out, const Store & store, const BasicDerivation & drv)
 {
     out << drv.outputs.size();
-    for (auto & i : drv.outputs)
-        out << i.first << store.printStorePath(i.second.path) << i.second.hashAlgo << i.second.hash;
+    for (auto & i : drv.outputs) {
+        out << i.first;
+        if (i.second.path) {
+            out << store.printStorePath(*i.second.path);
+        } else {
+            out << "";
+        }
+        out << i.second.hashAlgo << i.second.hash;
+    }
     writeStorePaths(store, out, drv.inputSrcs);
     out << drv.platform << drv.builder << drv.args;
     out << drv.env.size();

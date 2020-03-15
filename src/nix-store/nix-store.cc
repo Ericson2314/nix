@@ -96,7 +96,9 @@ static PathSet realisePath(StorePathWithOutputs path, bool build = true)
     else {
         if (build) store->ensurePath(path.path);
         else if (!store->isValidPath(path.path))
-            throw Error("path '%s' does not exist and cannot be created", store->printStorePath(path.path));
+            throw Error(
+                "path '%s' does not exist and cannot be created",
+                store->printStorePath(path.path));
         if (store2) {
             if (gcRoot == "")
                 printGCWarning();

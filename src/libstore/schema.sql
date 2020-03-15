@@ -31,6 +31,8 @@ create trigger if not exists DeleteSelfRefs before delete on ValidPaths
     delete from Refs where referrer = old.id and reference = old.id;
   end;
 
+-- Just used for derivations which are "resolved" in normal form, i.e. those
+-- that would not be changed by `hashDerivationModulo`.
 create table if not exists DerivationOutputs (
     drv  integer not null,
     id   text not null, -- symbolic output id, usually "out"
@@ -40,3 +42,18 @@ create table if not exists DerivationOutputs (
 );
 
 create index if not exists IndexDerivationOutputs on DerivationOutputs(path);
+
+-- maps derivations to their resolved equivalents, if the input derivation isn't
+-- itself resolved and the output derivation is known.
+create table if not exists ResolvedDrv (
+    unresolved_drv integer not null,
+    resolved_drv integer not null,
+    primary key (unresolved_drv, resolved_drv),
+    foreign key (unresolved_drv) references ValidPaths(id) on delete cascade,
+    foreign key (resolved_drv) references ValidPaths(id) on delete restrict
+)
+
+create trigger if not exists DeleteIdentityDrvResolutions before delete on ValidPaths
+  begin
+    delete from ResolvedDrv where drv = old.id and resolved_drv = old.id;
+  end;

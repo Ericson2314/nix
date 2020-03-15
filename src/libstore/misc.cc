@@ -198,11 +198,18 @@ void Store::queryMissing(const std::vector<StorePathWithOutputs> & targets,
             ParsedDerivation parsedDrv(path.path.clone(), *drv);
 
             PathSet invalid;
-            for (auto & j : drv->outputs)
-                if (wantOutput(j.first, path.outputs)
-                    && !isValidPath(j.second.path))
-                    invalid.insert(printStorePath(j.second.path));
-            if (invalid.empty()) return;
+            std::set<string> invalid_floating;
+            for (auto & j : drv->outputs) {
+                if (!wantOutput(j.first, path.outputs))
+                    continue;
+                if (j.second.path) {
+                    if (!isValidPath(*j.second.path))
+                        invalid.insert(printStorePath(*j.second.path));
+                } else {
+                    invalid_floating.insert(j);
+                }
+            }
+            if (invalid.empty() && invalid_floating.empty()) return;
 
             if (settings.useSubstitutes && parsedDrv.substitutesAllowed()) {
                 auto drvState = make_ref<Sync<DrvState>>(DrvState(invalid.size()));
