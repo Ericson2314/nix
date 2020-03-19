@@ -93,6 +93,10 @@ struct StorePathWithOutputs
     std::string to_string(const Store & store) const;
 };
 
+typedef std::map<std::string, StorePath> OutputPathMap;
+
+typedef std::map<StorePath, std::set<std::string>> StorePathOutputsMap;
+
 std::pair<std::string_view, StringSet> parsePathWithOutputs(std::string_view s);
 
 }

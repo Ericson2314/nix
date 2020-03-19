@@ -567,6 +567,8 @@ void LocalStore::checkDerivationOutputs(const StorePath & drvPath, const Derivat
     std::optional<Hash> h;
     for (auto & i : drv.outputs) {
         if (i.second.hashAlgo == "") {
+            // regular derivation output
+
             if (!h) {
                 // somewhat expensive so we do lazily
                 h = hashDerivationModulo(*this, drv, true);
@@ -574,11 +576,15 @@ void LocalStore::checkDerivationOutputs(const StorePath & drvPath, const Derivat
             StorePath path = makeOutputPath(i.first, *h, drvName);
             check(path, i.second.path, i.first);
         } else if (i.second.hash == "") {
+            // floating ca output
+
             if (i.second.path) {
                 throw Error("Floating CA derivation has non-empty path '%s' for output '%s'",
                     printStorePath(*i.second.path), i.first);
             }
         } else {
+            // fixed ca output
+
             bool recursive; Hash h;
             i.second.parseHashInfo(recursive, h);
             StorePath path = makeFixedOutputPath(recursive, h, drvName);

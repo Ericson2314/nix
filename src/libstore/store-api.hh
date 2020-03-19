@@ -111,6 +111,19 @@ struct SubstitutablePathInfo
 
 typedef std::map<StorePath, SubstitutablePathInfo> SubstitutablePathInfos;
 
+struct ResolvedDrvInfo {
+    StorePath resolvedDrv;
+    OutputPathMap outputPaths;
+};
+
+struct ResolvedDrvInfoWithValidity {
+    StorePath resolvedDrv;
+    std::map<std::string, std::pair<StorePath, bool>> OutputPathsWithValidity;
+};
+
+typedef std::map<StorePath, ResolvedDrvInfo> ResolvedDrvInfoMap;
+
+typedef std::map<StorePath, ResolvedDrvInfoWithValidity> ResolvedDrvInfoWithValidityMap;
 
 struct ValidPathInfo
 {
@@ -240,7 +253,7 @@ struct BuildResult
        regular and fixed-output CA derivations, but does for floating CA
        derivations, as those outputs' content hashes (and thus store paths) are
        not known a priori. */
-    std::map<string, StorePath> outputPaths;
+    OutputPathMap outputPaths;
 
     bool success() {
         return status == Built || status == Substituted || status == AlreadyValid;
@@ -401,21 +414,8 @@ public:
     /* Query which of the given CA derivations' outputs have a known mapping,
        and whether or not that path is valid. Optionally, try to substitute
        missing paths. */
-    virtual std::map<
-        StorePath, // drv
-        std::pair<
-            StorePath, // resolved DRV
-            std::map<
-                std::string, // output
-                std::pair<
-                    StorePath, // output path
-                    bool  // is valid
-                >
-            >
-        >
-    >
-    queryValidCAOutputs(
-        const std::map<StorePath, std::set<std::string>> & drvsOutputs,
+    virtual ResolvedDrvInfoWithValidityMap queryValidCAOutputs(
+        const StorePathOutputsMap & drvsOutputs,
         SubstituteFlag maybeSubstitute = NoSubstitute);
 
     /* Query the set of all valid paths. Note that for some store
@@ -482,8 +482,8 @@ public:
        when GCing some outputs but not others, or substituting some outputs but
        not others.
      */
-    virtual std::map<string, std::optional<StorePath>> queryDerivationOutputPaths(
-        const Derivation drv);
+    virtual std::pair<Derivation, std::map<string, std::optional<StorePath>>>
+    queryDerivationOutputPaths(const Derivation drv);
 
     /* Import a path into the store. */
     virtual void addToStore(const ValidPathInfo & info, Source & narSource,
@@ -656,18 +656,9 @@ public:
     virtual void queryMissing(
         const std::vector<StorePathWithOutputs> & targets,
         // Build not needed, but must remember mapping for coherence
-        std::map<
-            StorePath, // drv
-            std::pair<
-                StorePath, // resolved drv
-                std::map<
-                    std::string, // output
-                    StorePath // output path
-                >
-            >
-        > & willConstrain,
+        ResolvedDrvInfo & willConstrain,
         StorePathSet & willBuild, StorePathSet & willSubstitute,
-        StorePathSet & unknown, StorePathSet & unknownCADrv,
+        StorePathSet & unknown, StorePathSet & unknownFloatingCADrv,
         unsigned long long & downloadSize, unsigned long long & narSize);
 
     /* Like `queryMissing` but specifically for CA derivations, especially floating ones.
@@ -685,21 +676,11 @@ public:
      */
     virtual void queryMissingCA(
         const std::vector<StorePathWithOutputs> & targets,
-        // Build not needed, but must remember mapping for coherence
-        std::map<
-            StorePath, // drv
-            std::pair<
-                StorePath, // resolved drv
-                std::map<
-                    std::string, // output
-                    StorePath // output path
-                >
-            >
-        > & willConstrain,
-        std::map<StorePath, std::pair<StorePath, std::map<std::string, StorePath>>> & willBuildFixedOutput,
-        std::map<StorePath, std::pair<StorePath, std::map<std::string, StorePath>>> & willSubstituteFixedOutput,
-        std::map<StorePath, std::set<std::string>> & willBuildFloatingOutput,
-        std::map<StorePath, std::set<std::string>> & willSubstituteFloatingOutput,
+        ResolvedDrvInfo & willConstrain,
+        ResolvedDrvInfo & willBuildFixedOutput,
+        ResolvedDrvInfo & willSubstituteFixedOutput,
+        StorePathOutputsMap & willBuildFloatingOutput,
+        StorePathOutputsMap & willSubstituteFloatingOutput,
         StorePathSet & unknownDrv,
         unsigned long long & downloadSize, unsigned long long & narSize);
 

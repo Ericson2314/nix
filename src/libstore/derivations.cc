@@ -399,6 +399,7 @@ Hash hashDerivationModulo(Store & store, const Derivation & drv, bool maskOutput
     switch (drv.type()) {
     case DtCAFixed: {
         DerivationOutputs::const_iterator i = drv.outputs.begin();
+        auto outPath = store.makeOutputPath(i.first, h, drvName);
         return hashString(htSHA256, "fixed:out:"
             + i->second.hashAlgo + ":"
             + i->second.hash + ":"

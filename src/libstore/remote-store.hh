@@ -94,8 +94,11 @@ public:
 
     void addSignatures(const StorePath & storePath, const StringSet & sigs) override;
 
-    void queryMissing(const std::vector<StorePathWithOutputs> & targets,
-        StorePathSet & willBuild, StorePathSet & willSubstitute, StorePathSet & unknown,
+    void queryMissing(
+        const std::vector<StorePathWithOutputs> & targets,
+        ResolvedDrvInfo & willConstrain,
+        StorePathSet & willBuild, StorePathSet & willSubstitute,
+        StorePathSet & unknown, StorePathSet & unknownCADrv,
         unsigned long long & downloadSize, unsigned long long & narSize) override;
 
     void connect() override;
