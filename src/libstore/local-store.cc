@@ -564,31 +564,21 @@ void LocalStore::checkDerivationOutputs(const StorePath & drvPath, const Derivat
     // combinations that are currently prohibited.
     drv.type();
 
-    std::optional<Hash> h;
+    DrvHashModulo h = hashDerivationModulo(*this, drv, true);
     for (auto & i : drv.outputs) {
         if (i.second.hashAlgo == "") {
-            // regular derivation output
-
-            if (!h) {
-                // somewhat expensive so we do lazily
-                h = hashDerivationModulo(*this, drv, true);
-            }
+            // Regular, non-CA derivation should always return a single hash and
+            // not hash per output.
+            Hash h = std::get<0>(h);
             StorePath path = makeOutputPath(i.first, *h, drvName);
             check(path, i.second.path, i.first);
         } else if (i.second.hash == "") {
-            // floating ca output
-
-            if (i.second.path) {
-                throw Error("Floating CA derivation has non-empty path '%s' for output '%s'",
-                    printStorePath(*i.second.path), i.first);
-            }
-        } else {
-            // fixed ca output
-
-            bool recursive; Hash h;
-            i.second.parseHashInfo(recursive, h);
-            StorePath path = makeFixedOutputPath(recursive, h, drvName);
-            check(path, i.second.path, i.first);
+            // CA output
+            map::<string, Hash> h = std::get<1>(h);
+            check(
+                makeOutputPath(i.first, h[i.first], drvName),
+                i.second.path,
+                i.first);
         }
     }
 }
