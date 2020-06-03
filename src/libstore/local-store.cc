@@ -298,9 +298,7 @@ void LocalStore::openDB(State & state, bool create)
     /* Open the Nix database. */
     string dbPath = dbDir + "/db.sqlite";
     auto & db(state.db);
-    if (sqlite3_open_v2(dbPath.c_str(), &db.db,
-            SQLITE_OPEN_READWRITE | (create ? SQLITE_OPEN_CREATE : 0), 0) != SQLITE_OK)
-        throw Error(format("cannot open Nix database '%1%'") % dbPath);
+    state.db = SQLite(dbPath, create);
 
 #ifdef __CYGWIN__
     /* The cygwin version of sqlite3 has a patch which calls
@@ -311,11 +309,6 @@ void LocalStore::openDB(State & state, bool create)
        checkPhase on openssh), so we set it back to default behaviour. */
     SetDllDirectoryW(L"");
 #endif
-
-    if (sqlite3_busy_timeout(db, 60 * 60 * 1000) != SQLITE_OK)
-        throwSQLiteError(db, "setting timeout");
-
-    db.exec("pragma foreign_keys = 1");
 
     /* !!! check whether sqlite has been built with foreign key
        support */
@@ -350,7 +343,7 @@ void LocalStore::openDB(State & state, bool create)
 
     /* Initialise the database schema, if necessary. */
     if (create) {
-        const char * schema =
+        static const char schema[] =
 #include "schema.sql.gen.hh"
             ;
         db.exec(schema);
@@ -1061,11 +1054,11 @@ void LocalStore::addToStore(const ValidPathInfo & info, Source & source,
 
 
 StorePath LocalStore::addToStoreFromDump(const string & dump, const string & name,
-    bool recursive, HashType hashAlgo, RepairFlag repair)
+    FileIngestionMethod method, HashType hashAlgo, RepairFlag repair)
 {
     Hash h = hashString(hashAlgo, dump);
 
-    auto dstPath = makeFixedOutputPath(recursive, h, name);
+    auto dstPath = makeFixedOutputPath(method, h, name);
 
     addTempRoot(dstPath);
 
@@ -1085,7 +1078,7 @@ StorePath LocalStore::addToStoreFromDump(const string & dump, const string & nam
 
             autoGC();
 
-            if (recursive) {
+            if (method == FileIngestionMethod::Recursive) {
                 StringSource source(dump);
                 restorePath(realPath, source);
             } else
@@ -1098,7 +1091,7 @@ StorePath LocalStore::addToStoreFromDump(const string & dump, const string & nam
                above (if called with recursive == true and hashAlgo ==
                sha256); otherwise, compute it here. */
             HashResult hash;
-            if (recursive) {
+            if (method == FileIngestionMethod::Recursive) {
                 hash.first = hashAlgo == htSHA256 ? h : hashString(htSHA256, dump);
                 hash.second = dump.size();
             } else
@@ -1109,7 +1102,7 @@ StorePath LocalStore::addToStoreFromDump(const string & dump, const string & nam
             ValidPathInfo info(dstPath.clone());
             info.narHash = hash.first;
             info.narSize = hash.second;
-            info.ca = makeFixedOutputCA(recursive, h);
+            info.ca = makeFixedOutputCA(method, h);
             registerValidPath(info);
         }
 
@@ -1121,7 +1114,7 @@ StorePath LocalStore::addToStoreFromDump(const string & dump, const string & nam
 
 
 StorePath LocalStore::addToStore(const string & name, const Path & _srcPath,
-    bool recursive, HashType hashAlgo, PathFilter & filter, RepairFlag repair)
+    FileIngestionMethod method, HashType hashAlgo, PathFilter & filter, RepairFlag repair)
 {
     Path srcPath(absPath(_srcPath));
 
@@ -1129,12 +1122,12 @@ StorePath LocalStore::addToStore(const string & name, const Path & _srcPath,
        method for very large paths, but `copyPath' is mainly used for
        small files. */
     StringSink sink;
-    if (recursive)
+    if (method == FileIngestionMethod::Recursive)
         dumpPath(srcPath, sink, filter);
     else
         sink.s = make_ref<std::string>(readFile(srcPath));
 
-    return addToStoreFromDump(*sink.s, name, recursive, hashAlgo, repair);
+    return addToStoreFromDump(*sink.s, name, method, hashAlgo, repair);
 }
 
 
@@ -1286,7 +1279,7 @@ bool LocalStore::verifyStore(bool checkContents, RepairFlag repair)
                 else
                     hashSink = std::make_unique<HashModuloSink>(info->narHash.type, storePathToHash(printStorePath(info->path)));
 
-                dumpPath(toRealPath(printStorePath(i)), *hashSink);
+                dumpPath(Store::toRealPath(i), *hashSink);
                 auto current = hashSink->finish();
 
                 if (info->narHash != nullHash && info->narHash != current.first) {

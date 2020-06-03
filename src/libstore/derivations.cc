@@ -13,13 +13,13 @@ HashType parseHashAlgo(const string & s) {
     return parseHashType(s);
 }
 
-void DerivationOutput::parseHashType(bool & recursive, HashType & hashType) const
+void DerivationOutput::parseHashType(FileIngestionMethod & recursive, HashType & hashType) const
 {
-    recursive = false;
+    recursive = FileIngestionMethod::Flat;
     string algo = hashAlgo;
 
     if (string(algo, 0, 2) == "r:") {
-        recursive = true;
+        recursive = FileIngestionMethod::Recursive;
         algo = string(algo, 2);
     }
 
@@ -29,13 +29,39 @@ void DerivationOutput::parseHashType(bool & recursive, HashType & hashType) cons
     hashType = hashType_loc;
 }
 
-void DerivationOutput::parseHashInfo(bool & recursive, Hash & hash) const
+void DerivationOutput::parseHashInfo(FileIngestionMethod & recursive, Hash & hash) const
 {
     HashType hashType;
     parseHashType(recursive, hashType);
     hash = Hash(this->hash, hashType);
 }
 
+
+bool derivationIsCA(DerivationType dt) {
+    switch (dt) {
+    case DerivationType::Regular: return false;
+    case DerivationType::CAFixed: return true;
+    };
+    // Since enums can have non-variant values, but making a `default:` would
+    // disable exhaustiveness warnings.
+    abort();
+}
+
+bool derivationIsFixed(DerivationType dt) {
+    switch (dt) {
+    case DerivationType::Regular: return false;
+    case DerivationType::CAFixed: return true;
+    };
+    abort();
+}
+
+bool derivationIsImpure(DerivationType dt) {
+    switch (dt) {
+    case DerivationType::Regular: return false;
+    case DerivationType::CAFixed: return true;
+    };
+    abort();
+}
 
 BasicDerivation::BasicDerivation(const BasicDerivation & other)
     : platform(other.platform)
@@ -80,7 +106,7 @@ bool BasicDerivation::isBuiltin() const
 
 
 StorePath writeDerivation(ref<Store> store,
-    const Derivation & drv, const string & name, RepairFlag repair)
+    const Derivation & drv, std::string_view name, RepairFlag repair)
 {
     auto references = cloneStorePathSet(drv.inputSrcs);
     for (auto & i : drv.inputDrvs)
@@ -88,8 +114,8 @@ StorePath writeDerivation(ref<Store> store,
     /* Note that the outputs of a derivation are *not* references
        (that can be missing (of course) and should not necessarily be
        held during a garbage collection). */
-    string suffix = name + drvExtension;
-    string contents = drv.unparse(*store, false);
+    auto suffix = std::string(name) + drvExtension;
+    auto contents = drv.unparse(*store, false);
     return settings.readOnlyMode
         ? store->computeStorePathForText(suffix, contents, references)
         : store->addTextToStore(suffix, contents, references, repair);
@@ -350,11 +376,11 @@ DerivationType BasicDerivation::type() const
         outputs.begin()->second.hash != "" &&
         !outputs.begin()->second.path)
     {
-        return DtCAFixed;
+        return DerivationType::CAFixed;
     }
 
     auto const algo = outputs.begin()->second.hashAlgo;
-    auto const type = algo == "" ? DtRegular : DtCAFloating;
+    auto const type = algo == "" ? DerivationType::Regular : DerivationType::CAFloating;
     for (auto & i : outputs) {
         if (i.second.hash != "") {
             throw Error("Non-fixed-output derivation has fixed output");
@@ -417,7 +443,7 @@ DrvHashModulo hashDerivationModulo(Store & store, const Derivation & drv, bool m
 {
     /* Return a fixed hash for fixed-output derivations. */
     switch (drv.type()) {
-    case DtCAFixed: {
+    case DerivationType::CAFixed: {
         std::map<std::string, Hash> outputHashes;
         for (const auto & i : drv.outputs) {
             const Hash h = hashString(htSHA256, "fixed:out:"
@@ -428,7 +454,7 @@ DrvHashModulo hashDerivationModulo(Store & store, const Derivation & drv, bool m
         }
         return outputHashes;
     }
-    case DtCAFloating:
+    case DerivationType::CAFloating:
         throw Error("Floating CA derivations are unimplemented");
     default:
         break;

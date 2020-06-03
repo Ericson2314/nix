@@ -23,8 +23,8 @@ struct DerivationOutput
         , hashAlgo(std::move(hashAlgo))
         , hash(std::move(hash))
     { }
-    void parseHashType(bool & recursive, HashType & hashType) const;
-    void parseHashInfo(bool & recursive, Hash & hash) const;
+    void parseHashType(FileIngestionMethod & recursive, HashType & hashType) const;
+    void parseHashInfo(FileIngestionMethod & recursive, Hash & hash) const;
 };
 
 typedef std::map<string, DerivationOutput> DerivationOutputs;
@@ -35,21 +35,24 @@ typedef std::map<StorePath, StringSet> DerivationInputs;
 
 typedef std::map<string, string> StringPairs;
 
-// Bit:
-//  7: regular vs ca
-//  6: floating vs fixed hash if ca, regular always floating
-//  5: pure vs impure if ca, regular always pure
-//  _: Unassigned
-enum DerivationTypeAxis : uint8_t {
-    DtAxisCA = 0b10000000,
-    DtAxisFixed = 0b01000000,
-    DtAxisImpure = 0b00100000,
+enum struct DerivationType : uint8_t {
+    Regular,
+    CAFloating,
+    CAFixed,
 };
-enum DerivationType : uint8_t {
-    DtRegular = 0b0000000,
-    DtCAFloating = 0b10000000,
-    DtCAFixed = 0b11100000,
-};
+
+/* Do the outputs of the derivation have paths calculated from their content,
+   or from the derivation itself? */
+bool derivationIsCA(DerivationType);
+
+/* Is the content of the outputs fixed a-priori via a hash? Never true for
+   non-CA derivations. */
+bool derivationIsFixed(DerivationType);
+
+/* Is the derivation impure and needs to access non-deterministic resources, or
+   pure and can be sandboxed? Note that whether or not we actually sandbox the
+   derivation is controlled separately. Never true for non-CA derivations. */
+bool derivationIsImpure(DerivationType);
 
 struct BasicDerivation
 {
@@ -94,7 +97,7 @@ class Store;
 
 /* Write a derivation to the Nix store, and return its path. */
 StorePath writeDerivation(ref<Store> store,
-    const Derivation & drv, const string & name, RepairFlag repair = NoRepair);
+    const Derivation & drv, std::string_view name, RepairFlag repair = NoRepair);
 
 /* Read a derivation from a file. */
 Derivation readDerivation(const Store & store, const Path & drvPath);
