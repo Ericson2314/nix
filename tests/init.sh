@@ -15,10 +15,17 @@ mkdir "$NIX_CONF_DIR"
 
 cat > "$NIX_CONF_DIR"/nix.conf <<EOF
 build-users-group =
-gc-keep-outputs = false
-gc-keep-derivations = false
-env-keep-derivations = false
+keep-derivations = false
+sandbox = false
+experimental-features = nix-command flakes
+gc-reserved-space = 0
+flake-registry = $TEST_ROOT/registry.json
+include nix.conf.extra
+EOF
+
+cat > "$NIX_CONF_DIR"/nix.conf.extra <<EOF
 fsync-metadata = false
+!include nix.conf.extra.not-there
 EOF
 
 # Initialise the database.

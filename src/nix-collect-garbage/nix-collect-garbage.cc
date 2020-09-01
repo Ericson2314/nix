@@ -2,6 +2,7 @@
 #include "profiles.hh"
 #include "shared.hh"
 #include "globals.hh"
+#include "../nix/legacy.hh"
 
 #include <iostream>
 #include <cerrno>
@@ -48,12 +49,10 @@ void removeOldGenerations(std::string dir)
     }
 }
 
-int main(int argc, char * * argv)
+static int _main(int argc, char * * argv)
 {
-    bool removeOld = false;
-
-    return handleExceptions(argv[0], [&]() {
-        initNix();
+    {
+        bool removeOld = false;
 
         GCOptions options;
 
@@ -68,14 +67,14 @@ int main(int argc, char * * argv)
                 deleteOlderThan = getArg(*arg, arg, end);
             }
             else if (*arg == "--dry-run") dryRun = true;
-            else if (*arg == "--max-freed") {
-                long long maxFreed = getIntArg<long long>(*arg, arg, end, true);
-                options.maxFreed = maxFreed >= 0 ? maxFreed : 0;
-            }
+            else if (*arg == "--max-freed")
+                options.maxFreed = std::max(getIntArg<int64_t>(*arg, arg, end, true), (int64_t) 0);
             else
                 return false;
             return true;
         });
+
+        initPlugins();
 
         auto profilesDir = settings.nixStateDir + "/profiles";
         if (removeOld) removeOldGenerations(profilesDir);
@@ -88,5 +87,9 @@ int main(int argc, char * * argv)
             PrintFreed freed(true, results);
             store->collectGarbage(options, results);
         }
-    });
+
+        return 0;
+    }
 }
+
+static RegisterLegacyCommand s1("nix-collect-garbage", _main);

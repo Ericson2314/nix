@@ -1,8 +1,8 @@
-#include "common-args.hh"
 #include "globals.hh"
 #include "shared.hh"
 #include "store-api.hh"
 #include "util.hh"
+#include "loggers.hh"
 
 #include <algorithm>
 #include <cctype>
@@ -29,45 +29,57 @@ void printGCWarning()
     if (!gcWarning) return;
     static bool haveWarned = false;
     warnOnce(haveWarned,
-        "you did not specify ‘--add-root’; "
+        "you did not specify '--add-root'; "
         "the result might be removed by the garbage collector");
 }
 
 
-void printMissing(ref<Store> store, const PathSet & paths)
+void printMissing(ref<Store> store, const std::vector<StorePathWithOutputs> & paths, Verbosity lvl)
 {
-    unsigned long long downloadSize, narSize;
-    PathSet willBuild, willSubstitute, unknown;
+    uint64_t downloadSize, narSize;
+    StorePathSet willBuild, willSubstitute, unknown;
     store->queryMissing(paths, willBuild, willSubstitute, unknown, downloadSize, narSize);
-    printMissing(store, willBuild, willSubstitute, unknown, downloadSize, narSize);
+    printMissing(store, willBuild, willSubstitute, unknown, downloadSize, narSize, lvl);
 }
 
 
-void printMissing(ref<Store> store, const PathSet & willBuild,
-    const PathSet & willSubstitute, const PathSet & unknown,
-    unsigned long long downloadSize, unsigned long long narSize)
+void printMissing(ref<Store> store, const StorePathSet & willBuild,
+    const StorePathSet & willSubstitute, const StorePathSet & unknown,
+    uint64_t downloadSize, uint64_t narSize, Verbosity lvl)
 {
     if (!willBuild.empty()) {
-        printInfo(format("these derivations will be built:"));
-        Paths sorted = store->topoSortPaths(willBuild);
+        if (willBuild.size() == 1)
+            printMsg(lvl, fmt("this derivation will be built:"));
+        else
+            printMsg(lvl, fmt("these %d derivations will be built:", willBuild.size()));
+        auto sorted = store->topoSortPaths(willBuild);
         reverse(sorted.begin(), sorted.end());
         for (auto & i : sorted)
-            printInfo(format("  %1%") % i);
+            printMsg(lvl, fmt("  %s", store->printStorePath(i)));
     }
 
     if (!willSubstitute.empty()) {
-        printInfo(format("these paths will be fetched (%.2f MiB download, %.2f MiB unpacked):")
-            % (downloadSize / (1024.0 * 1024.0))
-            % (narSize / (1024.0 * 1024.0)));
+        const float downloadSizeMiB = downloadSize / (1024.f * 1024.f);
+        const float narSizeMiB = narSize / (1024.f * 1024.f);
+        if (willSubstitute.size() == 1) {
+            printMsg(lvl, fmt("this path will be fetched (%.2f MiB download, %.2f MiB unpacked):",
+                downloadSizeMiB,
+                narSizeMiB));
+        } else {
+            printMsg(lvl, fmt("these %d paths will be fetched (%.2f MiB download, %.2f MiB unpacked):",
+                willSubstitute.size(),
+                downloadSizeMiB,
+                narSizeMiB));
+        }
         for (auto & i : willSubstitute)
-            printInfo(format("  %1%") % i);
+            printMsg(lvl, fmt("  %s", store->printStorePath(i)));
     }
 
     if (!unknown.empty()) {
-        printInfo(format("don't know how to build these paths%1%:")
-            % (settings.readOnlyMode ? " (may be caused by read-only store access)" : ""));
+        printMsg(lvl, fmt("don't know how to build these paths%s:",
+                (settings.readOnlyMode ? " (may be caused by read-only store access)" : "")));
         for (auto & i : unknown)
-            printInfo(format("  %1%") % i);
+            printMsg(lvl, fmt("  %s", store->printStorePath(i)));
     }
 }
 
@@ -76,11 +88,12 @@ string getArg(const string & opt,
     Strings::iterator & i, const Strings::iterator & end)
 {
     ++i;
-    if (i == end) throw UsageError(format("‘%1%’ requires an argument") % opt);
+    if (i == end) throw UsageError("'%1%' requires an argument", opt);
     return *i;
 }
 
 
+#if OPENSSL_VERSION_NUMBER < 0x10101000L
 /* OpenSSL is not thread-safe by default - it will randomly crash
    unless the user supplies a mutex locking function. So let's do
    that. */
@@ -93,6 +106,7 @@ static void opensslLockCallback(int mode, int type, const char * file, int line)
     else
         opensslLocks[type].unlock();
 }
+#endif
 
 
 static void sigHandler(int signo) { }
@@ -106,11 +120,13 @@ void initNix()
     std::cerr.rdbuf()->pubsetbuf(buf, sizeof(buf));
 #endif
 
+#if OPENSSL_VERSION_NUMBER < 0x10101000L
     /* Initialise OpenSSL locking. */
     opensslLocks = std::vector<std::mutex>(CRYPTO_num_locks());
     CRYPTO_set_locking_callback(opensslLockCallback);
+#endif
 
-    settings.loadConfFile();
+    loadConfFile();
 
     startSignalHandlerThread();
 
@@ -125,6 +141,15 @@ void initNix()
     /* Install a dummy SIGUSR1 handler for use with pthread_kill(). */
     act.sa_handler = sigHandler;
     if (sigaction(SIGUSR1, &act, 0)) throw SysError("handling SIGUSR1");
+
+#if __APPLE__
+    /* HACK: on darwin, we need can’t use sigprocmask with SIGWINCH.
+     * Instead, add a dummy sigaction handler, and signalHandlerThread
+     * can handle the rest. */
+    struct sigaction sa;
+    sa.sa_handler = sigHandler;
+    if (sigaction(SIGWINCH, &sa, 0)) throw SysError("handling SIGWINCH");
+#endif
 
     /* Register a SIGSEGV handler to detect stack overflows. */
     detectStackOverflow();
@@ -143,86 +168,101 @@ void initNix()
        sshd). This breaks build users because they don't have access
        to the TMPDIR, in particular in ‘nix-store --serve’. */
 #if __APPLE__
-    if (getuid() == 0 && hasPrefix(getEnv("TMPDIR"), "/var/folders/"))
+    if (hasPrefix(getEnv("TMPDIR").value_or("/tmp"), "/var/folders/"))
         unsetenv("TMPDIR");
 #endif
 }
 
 
-struct LegacyArgs : public MixCommonArgs
+LegacyArgs::LegacyArgs(const std::string & programName,
+    std::function<bool(Strings::iterator & arg, const Strings::iterator & end)> parseArg)
+    : MixCommonArgs(programName), parseArg(parseArg)
 {
-    std::function<bool(Strings::iterator & arg, const Strings::iterator & end)> parseArg;
+    addFlag({
+        .longName = "no-build-output",
+        .shortName = 'Q',
+        .description = "do not show build output",
+        .handler = {[&]() {setLogFormat(LogFormat::raw); }},
+    });
 
-    LegacyArgs(const std::string & programName,
-        std::function<bool(Strings::iterator & arg, const Strings::iterator & end)> parseArg)
-        : MixCommonArgs(programName), parseArg(parseArg)
-    {
-        mkFlag('Q', "no-build-output", "do not show build output",
-            &settings.verboseBuild, false);
+    addFlag({
+        .longName = "keep-failed",
+        .shortName ='K',
+        .description = "keep temporary directories of failed builds",
+        .handler = {&(bool&) settings.keepFailed, true},
+    });
 
-        mkFlag('K', "keep-failed", "keep temporary directories of failed builds",
-            &(bool&) settings.keepFailed);
+    addFlag({
+        .longName = "keep-going",
+        .shortName ='k',
+        .description = "keep going after a build fails",
+        .handler = {&(bool&) settings.keepGoing, true},
+    });
 
-        mkFlag('k', "keep-going", "keep going after a build fails",
-            &(bool&) settings.keepGoing);
+    addFlag({
+        .longName = "fallback",
+        .description = "build from source if substitution fails",
+        .handler = {&(bool&) settings.tryFallback, true},
+    });
 
-        mkFlag(0, "fallback", "build from source if substitution fails", []() {
-            settings.tryFallback = true;
+    auto intSettingAlias = [&](char shortName, const std::string & longName,
+        const std::string & description, const std::string & dest) {
+        mkFlag<unsigned int>(shortName, longName, description, [=](unsigned int n) {
+            settings.set(dest, std::to_string(n));
         });
+    };
 
-        mkFlag1('j', "max-jobs", "jobs", "maximum number of parallel builds", [=](std::string s) {
-            settings.set("build-max-jobs", s);
-        });
+    intSettingAlias(0, "cores", "maximum number of CPU cores to use inside a build", "cores");
+    intSettingAlias(0, "max-silent-time", "number of seconds of silence before a build is killed", "max-silent-time");
+    intSettingAlias(0, "timeout", "number of seconds before a build is killed", "timeout");
 
-        auto intSettingAlias = [&](char shortName, const std::string & longName,
-            const std::string & description, const std::string & dest) {
-            mkFlag<unsigned int>(shortName, longName, description, [=](unsigned int n) {
-                settings.set(dest, std::to_string(n));
-            });
-        };
+    mkFlag(0, "readonly-mode", "do not write to the Nix store",
+        &settings.readOnlyMode);
 
-        intSettingAlias(0, "cores", "maximum number of CPU cores to use inside a build", "build-cores");
-        intSettingAlias(0, "max-silent-time", "number of seconds of silence before a build is killed", "build-max-silent-time");
-        intSettingAlias(0, "timeout", "number of seconds before a build is killed", "build-timeout");
+    mkFlag(0, "no-gc-warning", "disable warning about not using '--add-root'",
+        &gcWarning, false);
 
-        mkFlag(0, "readonly-mode", "do not write to the Nix store",
-            &settings.readOnlyMode);
+    addFlag({
+        .longName = "store",
+        .description = "URI of the Nix store to use",
+        .labels = {"store-uri"},
+        .handler = {&(std::string&) settings.storeUri},
+    });
+}
 
-        mkFlag(0, "no-build-hook", "disable use of the build hook mechanism",
-            &(bool&) settings.useBuildHook, false);
 
-        mkFlag(0, "show-trace", "show Nix expression stack trace in evaluation errors",
-            &settings.showTrace);
+bool LegacyArgs::processFlag(Strings::iterator & pos, Strings::iterator end)
+{
+    if (MixCommonArgs::processFlag(pos, end)) return true;
+    bool res = parseArg(pos, end);
+    if (res) ++pos;
+    return res;
+}
 
-        mkFlag(0, "no-gc-warning", "disable warning about not using ‘--add-root’",
-            &gcWarning, false);
-    }
 
-    bool processFlag(Strings::iterator & pos, Strings::iterator end) override
-    {
-        if (MixCommonArgs::processFlag(pos, end)) return true;
-        bool res = parseArg(pos, end);
-        if (res) ++pos;
-        return res;
-    }
-
-    bool processArgs(const Strings & args, bool finish) override
-    {
-        if (args.empty()) return true;
-        assert(args.size() == 1);
-        Strings ss(args);
-        auto pos = ss.begin();
-        if (!parseArg(pos, ss.end()))
-            throw UsageError(format("unexpected argument ‘%1%’") % args.front());
-        return true;
-    }
-};
+bool LegacyArgs::processArgs(const Strings & args, bool finish)
+{
+    if (args.empty()) return true;
+    assert(args.size() == 1);
+    Strings ss(args);
+    auto pos = ss.begin();
+    if (!parseArg(pos, ss.end()))
+        throw UsageError("unexpected argument '%1%'", args.front());
+    return true;
+}
 
 
 void parseCmdLine(int argc, char * * argv,
     std::function<bool(Strings::iterator & arg, const Strings::iterator & end)> parseArg)
 {
-    LegacyArgs(baseNameOf(argv[0]), parseArg).parseCmdline(argvToStrings(argc, argv));
+    parseCmdLine(std::string(baseNameOf(argv[0])), argvToStrings(argc, argv), parseArg);
+}
+
+
+void parseCmdLine(const string & programName, const Strings & args,
+    std::function<bool(Strings::iterator & arg, const Strings::iterator & end)> parseArg)
+{
+    LegacyArgs(programName, parseArg).parseCmdline(args);
 }
 
 
@@ -238,7 +278,10 @@ void printVersion(const string & programName)
         cfg.push_back("signed-caches");
 #endif
         std::cout << "Features: " << concatStringsSep(", ", cfg) << "\n";
-        std::cout << "Configuration file: " << settings.nixConfDir + "/nix.conf" << "\n";
+        std::cout << "System configuration file: " << settings.nixConfDir + "/nix.conf" << "\n";
+        std::cout << "User configuration files: " <<
+            concatStringsSep(":", settings.nixUserConfFiles)
+            << "\n";
         std::cout << "Store directory: " << settings.nixStore << "\n";
         std::cout << "State directory: " << settings.nixStateDir << "\n";
     }
@@ -249,14 +292,17 @@ void printVersion(const string & programName)
 void showManPage(const string & name)
 {
     restoreSignals();
-    execlp("man", "man", name.c_str(), NULL);
-    throw SysError(format("command ‘man %1%’ failed") % name.c_str());
+    setenv("MANPATH", settings.nixManDir.c_str(), 1);
+    execlp("man", "man", name.c_str(), nullptr);
+    throw SysError("command 'man %1%' failed", name.c_str());
 }
 
 
 int handleExceptions(const string & programName, std::function<void()> fun)
 {
     ReceiveInterrupts receiveInterrupts; // FIXME: need better place for this
+
+    ErrorInfo::programName = baseNameOf(programName);
 
     string error = ANSI_RED "error:" ANSI_NORMAL " ";
     try {
@@ -273,14 +319,13 @@ int handleExceptions(const string & programName, std::function<void()> fun)
     } catch (Exit & e) {
         return e.status;
     } catch (UsageError & e) {
-        printError(
-            format(error + "%1%\nTry ‘%2% --help’ for more information.")
-            % e.what() % programName);
+        logError(e.info());
+        printError("Try '%1% --help' for more information.", programName);
         return 1;
     } catch (BaseError & e) {
-        printError(format(error + "%1%%2%") % (settings.showTrace ? e.prefix() : "") % e.msg());
-        if (e.prefix() != "" && !settings.showTrace)
-            printError("(use ‘--show-trace’ to show detailed location information)");
+        logError(e.info());
+        if (e.hasTrace() && !loggerSettings.showTrace.get())
+            printError("(use '--show-trace' to show detailed location information)");
         return e.status;
     } catch (std::bad_alloc & e) {
         printError(error + "out of memory");
@@ -311,11 +356,11 @@ RunPager::RunPager()
             setenv("LESS", "FRSXMK", 1);
         restoreSignals();
         if (pager)
-            execl("/bin/sh", "sh", "-c", pager, NULL);
-        execlp("pager", "pager", NULL);
-        execlp("less", "less", NULL);
-        execlp("more", "more", NULL);
-        throw SysError(format("executing ‘%1%’") % pager);
+            execl("/bin/sh", "sh", "-c", pager, nullptr);
+        execlp("pager", "pager", nullptr);
+        execlp("less", "less", nullptr);
+        execlp("more", "more", nullptr);
+        throw SysError("executing '%1%'", pager);
     });
 
     pid.setKillSignal(SIGINT);
@@ -339,7 +384,7 @@ RunPager::~RunPager()
 }
 
 
-string showBytes(unsigned long long bytes)
+string showBytes(uint64_t bytes)
 {
     return (format("%.2f MiB") % (bytes / (1024.0 * 1024.0))).str();
 }
@@ -353,5 +398,6 @@ PrintFreed::~PrintFreed()
             % showBytes(results.bytesFreed);
 }
 
+Exit::~Exit() { }
 
 }

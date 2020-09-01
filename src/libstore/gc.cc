@@ -1,14 +1,17 @@
 #include "derivations.hh"
 #include "globals.hh"
 #include "local-store.hh"
+#include "finally.hh"
 
 #include <functional>
 #include <queue>
 #include <algorithm>
 #include <regex>
+#include <random>
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -18,7 +21,6 @@ namespace nix {
 
 
 static string gcLockName = "gc.lock";
-static string tempRootsDir = "temproots";
 static string gcRootsDir = "gcroots";
 
 
@@ -27,19 +29,19 @@ static string gcRootsDir = "gcroots";
    read.  To be precise: when they try to create a new temporary root
    file, they will block until the garbage collector has finished /
    yielded the GC lock. */
-int LocalStore::openGCLock(LockType lockType)
+AutoCloseFD LocalStore::openGCLock(LockType lockType)
 {
     Path fnGCLock = (format("%1%/%2%")
         % stateDir % gcLockName).str();
 
-    debug(format("acquiring global GC lock ‘%1%’") % fnGCLock);
+    debug(format("acquiring global GC lock '%1%'") % fnGCLock);
 
     AutoCloseFD fdGCLock = open(fnGCLock.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
     if (!fdGCLock)
-        throw SysError(format("opening global GC lock ‘%1%’") % fnGCLock);
+        throw SysError("opening global GC lock '%1%'", fnGCLock);
 
     if (!lockFile(fdGCLock.get(), lockType, false)) {
-        printError(format("waiting for the big garbage collector lock..."));
+        printInfo("waiting for the big garbage collector lock...");
         lockFile(fdGCLock.get(), lockType, true);
     }
 
@@ -47,7 +49,7 @@ int LocalStore::openGCLock(LockType lockType)
        process that can open the file for reading can DoS the
        collector. */
 
-    return fdGCLock.release();
+    return fdGCLock;
 }
 
 
@@ -58,13 +60,13 @@ static void makeSymlink(const Path & link, const Path & target)
 
     /* Create the new symlink. */
     Path tempLink = (format("%1%.tmp-%2%-%3%")
-        % link % getpid() % rand()).str();
+        % link % getpid() % random()).str();
     createSymlink(target, tempLink);
 
     /* Atomically replace the old one. */
     if (rename(tempLink.c_str(), link.c_str()) == -1)
-        throw SysError(format("cannot rename ‘%1%’ to ‘%2%’")
-            % tempLink % link);
+        throw SysError("cannot rename '%1%' to '%2%'",
+            tempLink , link);
 }
 
 
@@ -83,24 +85,22 @@ void LocalStore::addIndirectRoot(const Path & path)
 }
 
 
-Path LocalFSStore::addPermRoot(const Path & _storePath,
+Path LocalFSStore::addPermRoot(const StorePath & storePath,
     const Path & _gcRoot, bool indirect, bool allowOutsideRootsDir)
 {
-    Path storePath(canonPath(_storePath));
     Path gcRoot(canonPath(_gcRoot));
-    assertStorePath(storePath);
 
     if (isInStore(gcRoot))
-        throw Error(format(
+        throw Error(
                 "creating a garbage collector root (%1%) in the Nix store is forbidden "
-                "(are you running nix-build inside the store?)") % gcRoot);
+                "(are you running nix-build inside the store?)", gcRoot);
 
     if (indirect) {
         /* Don't clobber the link if it already exists and doesn't
            point to the Nix store. */
         if (pathExists(gcRoot) && (!isLink(gcRoot) || !isInStore(readLink(gcRoot))))
-            throw Error(format("cannot create symlink ‘%1%’; already exists") % gcRoot);
-        makeSymlink(gcRoot, storePath);
+            throw Error("cannot create symlink '%1%'; already exists", gcRoot);
+        makeSymlink(gcRoot, printStorePath(storePath));
         addIndirectRoot(gcRoot);
     }
 
@@ -109,16 +109,16 @@ Path LocalFSStore::addPermRoot(const Path & _storePath,
             Path rootsDir = canonPath((format("%1%/%2%") % stateDir % gcRootsDir).str());
 
             if (string(gcRoot, 0, rootsDir.size() + 1) != rootsDir + "/")
-                throw Error(format(
-                    "path ‘%1%’ is not a valid garbage collector root; "
-                    "it's not in the directory ‘%2%’")
-                    % gcRoot % rootsDir);
+                throw Error(
+                    "path '%1%' is not a valid garbage collector root; "
+                    "it's not in the directory '%2%'",
+                    gcRoot, rootsDir);
         }
 
-        if (baseNameOf(gcRoot) == baseNameOf(storePath))
+        if (baseNameOf(gcRoot) == std::string(storePath.to_string()))
             writeFile(gcRoot, "");
         else
-            makeSymlink(gcRoot, storePath);
+            makeSymlink(gcRoot, printStorePath(storePath));
     }
 
     /* Check that the root can be found by the garbage collector.
@@ -127,13 +127,14 @@ Path LocalFSStore::addPermRoot(const Path & _storePath,
        check if the root is in a directory in or linked from the
        gcroots directory. */
     if (settings.checkRootReachability) {
-        Roots roots = findRoots();
-        if (roots.find(gcRoot) == roots.end())
-            printError(
-                format(
-                    "warning: ‘%1%’ is not in a directory where the garbage collector looks for roots; "
-                    "therefore, ‘%2%’ might be removed by the garbage collector")
-                % gcRoot % storePath);
+        auto roots = findRoots(false);
+        if (roots[storePath].count(gcRoot) == 0)
+            logWarning({
+                .name = "GC root",
+                .hint = hintfmt("warning: '%1%' is not in a directory where the garbage collector looks for roots; "
+                    "therefore, '%2%' might be removed by the garbage collector",
+                    gcRoot, printStorePath(storePath))
+            });
     }
 
     /* Grab the global GC root, causing us to block while a GC is in
@@ -145,7 +146,7 @@ Path LocalFSStore::addPermRoot(const Path & _storePath,
 }
 
 
-void LocalStore::addTempRoot(const Path & path)
+void LocalStore::addTempRoot(const StorePath & path)
 {
     auto state(_state.lock());
 
@@ -153,30 +154,25 @@ void LocalStore::addTempRoot(const Path & path)
     if (!state->fdTempRoots) {
 
         while (1) {
-            Path dir = (format("%1%/%2%") % stateDir % tempRootsDir).str();
-            createDirs(dir);
-
-            state->fnTempRoots = (format("%1%/%2%") % dir % getpid()).str();
-
             AutoCloseFD fdGCLock = openGCLock(ltRead);
 
-            if (pathExists(state->fnTempRoots))
+            if (pathExists(fnTempRoots))
                 /* It *must* be stale, since there can be no two
                    processes with the same pid. */
-                unlink(state->fnTempRoots.c_str());
+                unlink(fnTempRoots.c_str());
 
-            state->fdTempRoots = openLockFile(state->fnTempRoots, true);
+            state->fdTempRoots = openLockFile(fnTempRoots, true);
 
             fdGCLock = -1;
 
-            debug(format("acquiring read lock on ‘%1%’") % state->fnTempRoots);
+            debug(format("acquiring read lock on '%1%'") % fnTempRoots);
             lockFile(state->fdTempRoots.get(), ltRead, true);
 
             /* Check whether the garbage collector didn't get in our
                way. */
             struct stat st;
             if (fstat(state->fdTempRoots.get(), &st) == -1)
-                throw SysError(format("statting ‘%1%’") % state->fnTempRoots);
+                throw SysError("statting '%1%'", fnTempRoots);
             if (st.st_size == 0) break;
 
             /* The garbage collector deleted this file before we could
@@ -188,34 +184,41 @@ void LocalStore::addTempRoot(const Path & path)
 
     /* Upgrade the lock to a write lock.  This will cause us to block
        if the garbage collector is holding our lock. */
-    debug(format("acquiring write lock on ‘%1%’") % state->fnTempRoots);
+    debug(format("acquiring write lock on '%1%'") % fnTempRoots);
     lockFile(state->fdTempRoots.get(), ltWrite, true);
 
-    string s = path + '\0';
+    string s = printStorePath(path) + '\0';
     writeFull(state->fdTempRoots.get(), s);
 
     /* Downgrade to a read lock. */
-    debug(format("downgrading to read lock on ‘%1%’") % state->fnTempRoots);
+    debug(format("downgrading to read lock on '%1%'") % fnTempRoots);
     lockFile(state->fdTempRoots.get(), ltRead, true);
 }
 
 
-void LocalStore::readTempRoots(PathSet & tempRoots, FDs & fds)
+static std::string censored = "{censored}";
+
+
+void LocalStore::findTempRoots(FDs & fds, Roots & tempRoots, bool censor)
 {
     /* Read the `temproots' directory for per-process temporary root
        files. */
-    DirEntries tempRootFiles = readDirectory(
-        (format("%1%/%2%") % stateDir % tempRootsDir).str());
+    for (auto & i : readDirectory(tempRootsDir)) {
+        if (i.name[0] == '.') {
+            // Ignore hidden files. Some package managers (notably portage) create
+            // those to keep the directory alive.
+            continue;
+        }
+        Path path = tempRootsDir + "/" + i.name;
 
-    for (auto & i : tempRootFiles) {
-        Path path = (format("%1%/%2%/%3%") % stateDir % tempRootsDir % i.name).str();
+        pid_t pid = std::stoi(i.name);
 
-        debug(format("reading temporary root file ‘%1%’") % path);
+        debug(format("reading temporary root file '%1%'") % path);
         FDPtr fd(new AutoCloseFD(open(path.c_str(), O_CLOEXEC | O_RDWR, 0666)));
         if (!*fd) {
             /* It's okay if the file has disappeared. */
             if (errno == ENOENT) continue;
-            throw SysError(format("opening temporary roots file ‘%1%’") % path);
+            throw SysError("opening temporary roots file '%1%'", path);
         }
 
         /* This should work, but doesn't, for some reason. */
@@ -226,7 +229,7 @@ void LocalStore::readTempRoots(PathSet & tempRoots, FDs & fds)
            only succeed if the owning process has died.  In that case
            we don't care about its temporary roots. */
         if (lockFile(fd->get(), ltWrite, false)) {
-            printError(format("removing stale temporary roots file ‘%1%’") % path);
+            printInfo("removing stale temporary roots file '%1%'", path);
             unlink(path.c_str());
             writeFull(fd->get(), "d");
             continue;
@@ -235,7 +238,7 @@ void LocalStore::readTempRoots(PathSet & tempRoots, FDs & fds)
         /* Acquire a read lock.  This will prevent the owning process
            from upgrading to a write lock, therefore it will block in
            addTempRoot(). */
-        debug(format("waiting for read lock on ‘%1%’") % path);
+        debug(format("waiting for read lock on '%1%'") % path);
         lockFile(fd->get(), ltRead, true);
 
         /* Read the entire file. */
@@ -246,9 +249,8 @@ void LocalStore::readTempRoots(PathSet & tempRoots, FDs & fds)
 
         while ((end = contents.find((char) 0, pos)) != string::npos) {
             Path root(contents, pos, end - pos);
-            debug(format("got temporary root ‘%1%’") % root);
-            assertStorePath(root);
-            tempRoots.insert(root);
+            debug("got temporary root '%s'", root);
+            tempRoots[parseStorePath(root)].emplace(censor ? censored : fmt("{temp:%d}", pid));
             pos = end + 1;
         }
 
@@ -260,11 +262,13 @@ void LocalStore::readTempRoots(PathSet & tempRoots, FDs & fds)
 void LocalStore::findRoots(const Path & path, unsigned char type, Roots & roots)
 {
     auto foundRoot = [&](const Path & path, const Path & target) {
-        Path storePath = toStorePath(target);
-        if (isStorePath(storePath) && isValidPath(storePath))
-            roots[path] = storePath;
-        else
-            printInfo(format("skipping invalid root from ‘%1%’ to ‘%2%’") % path % storePath);
+        try {
+            auto storePath = toStorePath(target).first;
+            if (isValidPath(storePath))
+                roots[std::move(storePath)].emplace(path);
+            else
+                printInfo("skipping invalid root from '%1%' to '%2%'", path, target);
+        } catch (BadStorePath &) { }
     };
 
     try {
@@ -287,7 +291,7 @@ void LocalStore::findRoots(const Path & path, unsigned char type, Roots & roots)
                 target = absPath(target, dirOf(path));
                 if (!pathExists(target)) {
                     if (isInDir(path, stateDir + "/" + gcRootsDir + "/auto")) {
-                        printInfo(format("removing stale link from ‘%1%’ to ‘%2%’") % path % target);
+                        printInfo(format("removing stale link from '%1%' to '%2%'") % path % target);
                         unlink(path.c_str());
                     }
                 } else {
@@ -300,9 +304,9 @@ void LocalStore::findRoots(const Path & path, unsigned char type, Roots & roots)
         }
 
         else if (type == DT_REG) {
-            Path storePath = storeDir + "/" + baseNameOf(path);
-            if (isStorePath(storePath) && isValidPath(storePath))
-                roots[path] = storePath;
+            auto storePath = maybeParseStorePath(storeDir + "/" + std::string(baseNameOf(path)));
+            if (storePath && isValidPath(*storePath))
+                roots[std::move(*storePath)].emplace(path);
         }
 
     }
@@ -310,28 +314,40 @@ void LocalStore::findRoots(const Path & path, unsigned char type, Roots & roots)
     catch (SysError & e) {
         /* We only ignore permanent failures. */
         if (e.errNo == EACCES || e.errNo == ENOENT || e.errNo == ENOTDIR)
-            printInfo(format("cannot read potential root ‘%1%’") % path);
+            printInfo("cannot read potential root '%1%'", path);
         else
             throw;
     }
 }
 
 
-Roots LocalStore::findRoots()
+void LocalStore::findRootsNoTemp(Roots & roots, bool censor)
+{
+    /* Process direct roots in {gcroots,profiles}. */
+    findRoots(stateDir + "/" + gcRootsDir, DT_UNKNOWN, roots);
+    findRoots(stateDir + "/profiles", DT_UNKNOWN, roots);
+
+    /* Add additional roots returned by different platforms-specific
+       heuristics.  This is typically used to add running programs to
+       the set of roots (to prevent them from being garbage collected). */
+    findRuntimeRoots(roots, censor);
+}
+
+
+Roots LocalStore::findRoots(bool censor)
 {
     Roots roots;
+    findRootsNoTemp(roots, censor);
 
-    /* Process direct roots in {gcroots,manifests,profiles}. */
-    findRoots(stateDir + "/" + gcRootsDir, DT_UNKNOWN, roots);
-    if (pathExists(stateDir + "/manifests"))
-        findRoots(stateDir + "/manifests", DT_UNKNOWN, roots);
-    findRoots(stateDir + "/profiles", DT_UNKNOWN, roots);
+    FDs fds;
+    findTempRoots(fds, roots, censor);
 
     return roots;
 }
 
+typedef std::unordered_map<Path, std::unordered_set<std::string>> UncheckedRoots;
 
-static void readProcLink(const string & file, StringSet & paths)
+static void readProcLink(const string & file, UncheckedRoots & roots)
 {
     /* 64 is the starting buffer size gnu readlink uses... */
     auto bufsiz = ssize_t{64};
@@ -339,7 +355,7 @@ try_again:
     char buf[bufsiz];
     auto res = readlink(file.c_str(), buf, bufsiz);
     if (res == -1) {
-        if (errno == ENOENT || errno == EACCES)
+        if (errno == ENOENT || errno == EACCES || errno == ESRCH)
             return;
         throw SysError("reading symlink");
     }
@@ -350,8 +366,8 @@ try_again:
         goto try_again;
     }
     if (res > 0 && buf[0] == '/')
-        paths.emplace(static_cast<char *>(buf), res);
-    return;
+        roots[std::string(static_cast<char *>(buf), res)]
+            .emplace(file);
 }
 
 static string quoteRegexChars(const string & raw)
@@ -360,19 +376,20 @@ static string quoteRegexChars(const string & raw)
     return std::regex_replace(raw, specialRegex, R"(\$&)");
 }
 
-static void readFileRoots(const char * path, StringSet & paths)
+static void readFileRoots(const char * path, UncheckedRoots & roots)
 {
     try {
-        paths.emplace(readFile(path));
+        roots[readFile(path)].emplace(path);
     } catch (SysError & e) {
         if (e.errNo != ENOENT && e.errNo != EACCES)
             throw;
     }
 }
 
-void LocalStore::findRuntimeRoots(PathSet & roots)
+void LocalStore::findRuntimeRoots(Roots & roots, bool censor)
 {
-    StringSet paths;
+    UncheckedRoots unchecked;
+
     auto procDir = AutoCloseDir{opendir("/proc")};
     if (procDir) {
         struct dirent * ent;
@@ -382,41 +399,44 @@ void LocalStore::findRuntimeRoots(PathSet & roots)
         while (errno = 0, ent = readdir(procDir.get())) {
             checkInterrupt();
             if (std::regex_match(ent->d_name, digitsRegex)) {
-                readProcLink((format("/proc/%1%/exe") % ent->d_name).str(), paths);
-                readProcLink((format("/proc/%1%/cwd") % ent->d_name).str(), paths);
+                readProcLink(fmt("/proc/%s/exe" ,ent->d_name), unchecked);
+                readProcLink(fmt("/proc/%s/cwd", ent->d_name), unchecked);
 
-                auto fdStr = (format("/proc/%1%/fd") % ent->d_name).str();
+                auto fdStr = fmt("/proc/%s/fd", ent->d_name);
                 auto fdDir = AutoCloseDir(opendir(fdStr.c_str()));
                 if (!fdDir) {
                     if (errno == ENOENT || errno == EACCES)
                         continue;
-                    throw SysError(format("opening %1%") % fdStr);
+                    throw SysError("opening %1%", fdStr);
                 }
                 struct dirent * fd_ent;
                 while (errno = 0, fd_ent = readdir(fdDir.get())) {
-                    if (fd_ent->d_name[0] != '.') {
-                        readProcLink((format("%1%/%2%") % fdStr % fd_ent->d_name).str(), paths);
-                    }
+                    if (fd_ent->d_name[0] != '.')
+                        readProcLink(fmt("%s/%s", fdStr, fd_ent->d_name), unchecked);
                 }
-                if (errno)
-                    throw SysError(format("iterating /proc/%1%/fd") % ent->d_name);
+                if (errno) {
+                    if (errno == ESRCH)
+                        continue;
+                    throw SysError("iterating /proc/%1%/fd", ent->d_name);
+                }
                 fdDir.reset();
 
-                auto mapLines =
-                    tokenizeString<std::vector<string>>(readFile((format("/proc/%1%/maps") % ent->d_name).str(), true), "\n");
-                for (const auto& line : mapLines) {
-                    auto match = std::smatch{};
-                    if (std::regex_match(line, match, mapRegex))
-                        paths.emplace(match[1]);
-                }
-
                 try {
-                    auto envString = readFile((format("/proc/%1%/environ") % ent->d_name).str(), true);
+                    auto mapFile = fmt("/proc/%s/maps", ent->d_name);
+                    auto mapLines = tokenizeString<std::vector<string>>(readFile(mapFile), "\n");
+                    for (const auto & line : mapLines) {
+                        auto match = std::smatch{};
+                        if (std::regex_match(line, match, mapRegex))
+                            unchecked[match[1]].emplace(mapFile);
+                    }
+
+                    auto envFile = fmt("/proc/%s/environ", ent->d_name);
+                    auto envString = readFile(envFile);
                     auto env_end = std::sregex_iterator{};
                     for (auto i = std::sregex_iterator{envString.begin(), envString.end(), storePathRegex}; i != env_end; ++i)
-                        paths.emplace(i->str());
+                        unchecked[i->str()].emplace(envFile);
                 } catch (SysError & e) {
-                    if (errno == ENOENT || errno == EACCES)
+                    if (errno == ENOENT || errno == EACCES || errno == ESRCH)
                         continue;
                     throw;
                 }
@@ -427,34 +447,43 @@ void LocalStore::findRuntimeRoots(PathSet & roots)
     }
 
 #if !defined(__linux__)
-    try {
-        std::regex lsofRegex(R"(^n(/.*)$)");
-        auto lsofLines =
-            tokenizeString<std::vector<string>>(runProgram(LSOF, true, { "-n", "-w", "-F", "n" }), "\n");
-        for (const auto & line : lsofLines) {
-            std::smatch match;
-            if (std::regex_match(line, match, lsofRegex))
-                paths.emplace(match[1]);
+    // lsof is really slow on OS X. This actually causes the gc-concurrent.sh test to fail.
+    // See: https://github.com/NixOS/nix/issues/3011
+    // Because of this we disable lsof when running the tests.
+    if (getEnv("_NIX_TEST_NO_LSOF") != "1") {
+        try {
+            std::regex lsofRegex(R"(^n(/.*)$)");
+            auto lsofLines =
+                tokenizeString<std::vector<string>>(runProgram(LSOF, true, { "-n", "-w", "-F", "n" }), "\n");
+            for (const auto & line : lsofLines) {
+                std::smatch match;
+                if (std::regex_match(line, match, lsofRegex))
+                    unchecked[match[1]].emplace("{lsof}");
+            }
+        } catch (ExecError & e) {
+            /* lsof not installed, lsof failed */
         }
-    } catch (ExecError & e) {
-        /* lsof not installed, lsof failed */
     }
 #endif
 
 #if defined(__linux__)
-    readFileRoots("/proc/sys/kernel/modprobe", paths);
-    readFileRoots("/proc/sys/kernel/fbsplash", paths);
-    readFileRoots("/proc/sys/kernel/poweroff_cmd", paths);
+    readFileRoots("/proc/sys/kernel/modprobe", unchecked);
+    readFileRoots("/proc/sys/kernel/fbsplash", unchecked);
+    readFileRoots("/proc/sys/kernel/poweroff_cmd", unchecked);
 #endif
 
-    for (auto & i : paths)
-        if (isInStore(i)) {
-            Path path = toStorePath(i);
-            if (roots.find(path) == roots.end() && isStorePath(path) && isValidPath(path)) {
-                debug(format("got additional root ‘%1%’") % path);
-                roots.insert(path);
-            }
-        }
+    for (auto & [target, links] : unchecked) {
+        if (!isInStore(target)) continue;
+        try {
+            auto path = toStorePath(target).first;
+            if (!isValidPath(path)) continue;
+            debug("got additional root '%1%'", printStorePath(path));
+            if (censor)
+                roots[path].insert(censored);
+            else
+                roots[path].insert(links.begin(), links.end());
+        } catch (BadStorePath &) { }
+    }
 }
 
 
@@ -463,18 +492,19 @@ struct GCLimitReached { };
 
 struct LocalStore::GCState
 {
-    GCOptions options;
+    const GCOptions & options;
     GCResults & results;
-    PathSet roots;
-    PathSet tempRoots;
-    PathSet dead;
-    PathSet alive;
+    StorePathSet roots;
+    StorePathSet tempRoots;
+    StorePathSet dead;
+    StorePathSet alive;
     bool gcKeepOutputs;
     bool gcKeepDerivations;
-    unsigned long long bytesInvalidated;
+    uint64_t bytesInvalidated;
     bool moveToTrash = true;
     bool shouldDelete;
-    GCState(GCResults & results_) : results(results_), bytesInvalidated(0) { }
+    GCState(const GCOptions & options, GCResults & results)
+        : options(options), results(results), bytesInvalidated(0) { }
 };
 
 
@@ -482,13 +512,13 @@ bool LocalStore::isActiveTempFile(const GCState & state,
     const Path & path, const string & suffix)
 {
     return hasSuffix(path, suffix)
-        && state.tempRoots.find(string(path, 0, path.size() - suffix.size())) != state.tempRoots.end();
+        && state.tempRoots.count(parseStorePath(string(path, 0, path.size() - suffix.size())));
 }
 
 
 void LocalStore::deleteGarbage(GCState & state, const Path & path)
 {
-    unsigned long long bytesFreed;
+    uint64_t bytesFreed;
     deletePath(path, bytesFreed);
     state.results.bytesFreed += bytesFreed;
 }
@@ -498,26 +528,27 @@ void LocalStore::deletePathRecursive(GCState & state, const Path & path)
 {
     checkInterrupt();
 
-    unsigned long long size = 0;
+    uint64_t size = 0;
 
-    if (isStorePath(path) && isValidPath(path)) {
-        PathSet referrers;
-        queryReferrers(path, referrers);
+    auto storePath = maybeParseStorePath(path);
+    if (storePath && isValidPath(*storePath)) {
+        StorePathSet referrers;
+        queryReferrers(*storePath, referrers);
         for (auto & i : referrers)
-            if (i != path) deletePathRecursive(state, i);
-        size = queryPathInfo(path)->narSize;
-        invalidatePathChecked(path);
+            if (printStorePath(i) != path) deletePathRecursive(state, printStorePath(i));
+        size = queryPathInfo(*storePath)->narSize;
+        invalidatePathChecked(*storePath);
     }
 
-    Path realPath = realStoreDir + "/" + baseNameOf(path);
+    Path realPath = realStoreDir + "/" + std::string(baseNameOf(path));
 
     struct stat st;
     if (lstat(realPath.c_str(), &st)) {
         if (errno == ENOENT) return;
-        throw SysError(format("getting status of %1%") % realPath);
+        throw SysError("getting status of %1%", realPath);
     }
 
-    printInfo(format("deleting ‘%1%’") % path);
+    printInfo(format("deleting '%1%'") % path);
 
     state.results.paths.insert(path);
 
@@ -532,14 +563,14 @@ void LocalStore::deletePathRecursive(GCState & state, const Path & path)
         // size.
         try {
             if (chmod(realPath.c_str(), st.st_mode | S_IWUSR) == -1)
-                throw SysError(format("making ‘%1%’ writable") % realPath);
-            Path tmp = trashDir + "/" + baseNameOf(path);
+                throw SysError("making '%1%' writable", realPath);
+            Path tmp = trashDir + "/" + std::string(baseNameOf(path));
             if (rename(realPath.c_str(), tmp.c_str()))
-                throw SysError(format("unable to rename ‘%1%’ to ‘%2%’") % realPath % tmp);
+                throw SysError("unable to rename '%1%' to '%2%'", realPath, tmp);
             state.bytesInvalidated += size;
         } catch (SysError & e) {
             if (e.errNo == ENOSPC) {
-                printInfo(format("note: can't create move ‘%1%’: %2%") % realPath % e.msg());
+                printInfo(format("note: can't create move '%1%': %2%") % realPath % e.msg());
                 deleteGarbage(state, realPath);
             }
         }
@@ -553,46 +584,41 @@ void LocalStore::deletePathRecursive(GCState & state, const Path & path)
 }
 
 
-bool LocalStore::canReachRoot(GCState & state, PathSet & visited, const Path & path)
+bool LocalStore::canReachRoot(GCState & state, StorePathSet & visited, const StorePath & path)
 {
-    if (visited.find(path) != visited.end()) return false;
+    if (visited.count(path)) return false;
 
-    if (state.alive.find(path) != state.alive.end()) {
-        return true;
-    }
+    if (state.alive.count(path)) return true;
 
-    if (state.dead.find(path) != state.dead.end()) {
-        return false;
-    }
+    if (state.dead.count(path)) return false;
 
-    if (state.roots.find(path) != state.roots.end()) {
-        debug(format("cannot delete ‘%1%’ because it's a root") % path);
+    if (state.roots.count(path)) {
+        debug("cannot delete '%1%' because it's a root", printStorePath(path));
         state.alive.insert(path);
         return true;
     }
 
     visited.insert(path);
 
-    if (!isStorePath(path) || !isValidPath(path)) return false;
+    if (!isValidPath(path)) return false;
 
-    PathSet incoming;
+    StorePathSet incoming;
 
     /* Don't delete this path if any of its referrers are alive. */
     queryReferrers(path, incoming);
 
-    /* If gc-keep-derivations is set and this is a derivation, then
+    /* If keep-derivations is set and this is a derivation, then
        don't delete the derivation if any of the outputs are alive. */
-    if (state.gcKeepDerivations && isDerivation(path)) {
-        PathSet outputs = queryDerivationOutputs(path);
-        for (auto & i : outputs)
+    if (state.gcKeepDerivations && path.isDerivation()) {
+        for (auto & i : queryDerivationOutputs(path))
             if (isValidPath(i) && queryPathInfo(i)->deriver == path)
                 incoming.insert(i);
     }
 
-    /* If gc-keep-outputs is set, then don't delete this path if there
+    /* If keep-outputs is set, then don't delete this path if there
        are derivers of this path that are not garbage. */
     if (state.gcKeepOutputs) {
-        PathSet derivers = queryValidDerivers(path);
+        auto derivers = queryValidDerivers(path);
         for (auto & i : derivers)
             incoming.insert(i);
     }
@@ -612,12 +638,14 @@ void LocalStore::tryToDelete(GCState & state, const Path & path)
 {
     checkInterrupt();
 
-    auto realPath = realStoreDir + "/" + baseNameOf(path);
+    auto realPath = realStoreDir + "/" + std::string(baseNameOf(path));
     if (realPath == linksDir || realPath == trashDir) return;
 
-    //Activity act(*logger, lvlDebug, format("considering whether to delete ‘%1%’") % path);
+    //Activity act(*logger, lvlDebug, format("considering whether to delete '%1%'") % path);
 
-    if (!isStorePath(path) || !isValidPath(path)) {
+    auto storePath = maybeParseStorePath(path);
+
+    if (!storePath || !isValidPath(*storePath)) {
         /* A lock file belonging to a path that we're building right
            now isn't garbage. */
         if (isActiveTempFile(state, path, ".lock")) return;
@@ -632,16 +660,17 @@ void LocalStore::tryToDelete(GCState & state, const Path & path)
         if (isActiveTempFile(state, path, ".check")) return;
     }
 
-    PathSet visited;
+    StorePathSet visited;
 
-    if (canReachRoot(state, visited, path)) {
-        debug(format("cannot delete ‘%1%’ because it's still reachable") % path);
+    if (storePath && canReachRoot(state, visited, *storePath)) {
+        debug("cannot delete '%s' because it's still reachable", path);
     } else {
         /* No path we visited was a root, so everything is garbage.
            But we only delete ‘path’ and its referrers here so that
            ‘nix-store --delete’ doesn't have the unexpected effect of
            recursing into derivations and outputs. */
-        state.dead.insert(visited.begin(), visited.end());
+        for (auto & i : visited)
+            state.dead.insert(i);
         if (state.shouldDelete)
             deletePathRecursive(state, path);
     }
@@ -656,9 +685,9 @@ void LocalStore::tryToDelete(GCState & state, const Path & path)
 void LocalStore::removeUnusedLinks(const GCState & state)
 {
     AutoCloseDir dir(opendir(linksDir.c_str()));
-    if (!dir) throw SysError(format("opening directory ‘%1%’") % linksDir);
+    if (!dir) throw SysError("opening directory '%1%'", linksDir);
 
-    long long actualSize = 0, unsharedSize = 0;
+    int64_t actualSize = 0, unsharedSize = 0;
 
     struct dirent * dirent;
     while (errno = 0, dirent = readdir(dir.get())) {
@@ -669,44 +698,42 @@ void LocalStore::removeUnusedLinks(const GCState & state)
 
         struct stat st;
         if (lstat(path.c_str(), &st) == -1)
-            throw SysError(format("statting ‘%1%’") % path);
+            throw SysError("statting '%1%'", path);
 
         if (st.st_nlink != 1) {
-            unsigned long long size = st.st_blocks * 512ULL;
-            actualSize += size;
-            unsharedSize += (st.st_nlink - 1) * size;
+            actualSize += st.st_size;
+            unsharedSize += (st.st_nlink - 1) * st.st_size;
             continue;
         }
 
-        printMsg(lvlTalkative, format("deleting unused link ‘%1%’") % path);
+        printMsg(lvlTalkative, format("deleting unused link '%1%'") % path);
 
         if (unlink(path.c_str()) == -1)
-            throw SysError(format("deleting ‘%1%’") % path);
+            throw SysError("deleting '%1%'", path);
 
-        state.results.bytesFreed += st.st_blocks * 512ULL;
+        state.results.bytesFreed += st.st_size;
     }
 
     struct stat st;
     if (stat(linksDir.c_str(), &st) == -1)
-        throw SysError(format("statting ‘%1%’") % linksDir);
-    long long overhead = st.st_blocks * 512ULL;
+        throw SysError("statting '%1%'", linksDir);
+    auto overhead = st.st_blocks * 512ULL;
 
-    printInfo(format("note: currently hard linking saves %.2f MiB")
-        % ((unsharedSize - actualSize - overhead) / (1024.0 * 1024.0)));
+    printInfo("note: currently hard linking saves %.2f MiB",
+        ((unsharedSize - actualSize - overhead) / (1024.0 * 1024.0)));
 }
 
 
 void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
 {
-    GCState state(results);
-    state.options = options;
+    GCState state(options, results);
     state.gcKeepOutputs = settings.gcKeepOutputs;
     state.gcKeepDerivations = settings.gcKeepDerivations;
 
     /* Using `--ignore-liveness' with `--delete' can have unintended
-       consequences if `gc-keep-outputs' or `gc-keep-derivations' are
-       true (the garbage collector will recurse into deleting the
-       outputs or derivers, respectively).  So disable them. */
+       consequences if `keep-outputs' or `keep-derivations' are true
+       (the garbage collector will recurse into deleting the outputs
+       or derivers, respectively).  So disable them. */
     if (options.action == GCOptions::gcDeleteSpecific && options.ignoreLiveness) {
         state.gcKeepOutputs = false;
         state.gcKeepDerivations = false;
@@ -724,24 +751,23 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
 
     /* Find the roots.  Since we've grabbed the GC lock, the set of
        permanent roots cannot increase now. */
-    printError(format("finding garbage collector roots..."));
-    Roots rootMap = options.ignoreLiveness ? Roots() : findRoots();
-
-    for (auto & i : rootMap) state.roots.insert(i.second);
-
-    /* Add additional roots returned by the program specified by the
-       NIX_ROOT_FINDER environment variable.  This is typically used
-       to add running programs to the set of roots (to prevent them
-       from being garbage collected). */
+    printInfo("finding garbage collector roots...");
+    Roots rootMap;
     if (!options.ignoreLiveness)
-        findRuntimeRoots(state.roots);
+        findRootsNoTemp(rootMap, true);
+
+    for (auto & i : rootMap) state.roots.insert(i.first);
 
     /* Read the temporary roots.  This acquires read locks on all
        per-process temporary root files.  So after this point no paths
        can be added to the set of temporary roots. */
     FDs fds;
-    readTempRoots(state.tempRoots, fds);
-    state.roots.insert(state.tempRoots.begin(), state.tempRoots.end());
+    Roots tempRoots;
+    findTempRoots(fds, tempRoots, true);
+    for (auto & root : tempRoots) {
+        state.tempRoots.insert(root.first);
+        state.roots.insert(root.first);
+    }
 
     /* After this point the set of roots or temporary roots cannot
        increase, since we hold locks on everything.  So everything
@@ -753,7 +779,7 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
             createDirs(trashDir);
         } catch (SysError & e) {
             if (e.errNo == ENOSPC) {
-                printInfo(format("note: can't create trash directory: %1%") % e.msg());
+                printInfo("note: can't create trash directory: %s", e.msg());
                 state.moveToTrash = false;
             }
         }
@@ -765,23 +791,26 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
     if (options.action == GCOptions::gcDeleteSpecific) {
 
         for (auto & i : options.pathsToDelete) {
-            assertStorePath(i);
-            tryToDelete(state, i);
+            tryToDelete(state, printStorePath(i));
             if (state.dead.find(i) == state.dead.end())
-                throw Error(format("cannot delete path ‘%1%’ since it is still alive") % i);
+                throw Error(
+                    "cannot delete path '%1%' since it is still alive. "
+                    "To find out why use: "
+                    "nix-store --query --roots",
+                    printStorePath(i));
         }
 
     } else if (options.maxFreed > 0) {
 
         if (state.shouldDelete)
-            printError(format("deleting garbage..."));
+            printInfo("deleting garbage...");
         else
-            printError(format("determining live/dead paths..."));
+            printInfo("determining live/dead paths...");
 
         try {
 
             AutoCloseDir dir(opendir(realStoreDir.c_str()));
-            if (!dir) throw SysError(format("opening directory ‘%1%’") % realStoreDir);
+            if (!dir) throw SysError("opening directory '%1%'", realStoreDir);
 
             /* Read the store and immediately delete all paths that
                aren't valid.  When using --max-freed etc., deleting
@@ -796,7 +825,8 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
                 string name = dirent->d_name;
                 if (name == "." || name == "..") continue;
                 Path path = storeDir + "/" + name;
-                if (isStorePath(path) && isValidPath(path))
+                auto storePath = maybeParseStorePath(path);
+                if (storePath && isValidPath(*storePath))
                     entries.push_back(path);
                 else
                     tryToDelete(state, path);
@@ -810,7 +840,8 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
                alphabetically first (e.g. /nix/store/000...).  This
                matters when using --max-freed etc. */
             vector<Path> entries_(entries.begin(), entries.end());
-            random_shuffle(entries_.begin(), entries_.end());
+            std::mt19937 gen(1);
+            std::shuffle(entries_.begin(), entries_.end(), gen);
 
             for (auto & i : entries_)
                 tryToDelete(state, i);
@@ -820,12 +851,14 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
     }
 
     if (state.options.action == GCOptions::gcReturnLive) {
-        state.results.paths = state.alive;
+        for (auto & i : state.alive)
+            state.results.paths.insert(printStorePath(i));
         return;
     }
 
     if (state.options.action == GCOptions::gcReturnDead) {
-        state.results.paths = state.dead;
+        for (auto & i : state.dead)
+            state.results.paths.insert(printStorePath(i));
         return;
     }
 
@@ -834,17 +867,98 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
     fds.clear();
 
     /* Delete the trash directory. */
-    printInfo(format("deleting ‘%1%’") % trashDir);
+    printInfo(format("deleting '%1%'") % trashDir);
     deleteGarbage(state, trashDir);
 
     /* Clean up the links directory. */
     if (options.action == GCOptions::gcDeleteDead || options.action == GCOptions::gcDeleteSpecific) {
-        printError(format("deleting unused links..."));
+        printInfo("deleting unused links...");
         removeUnusedLinks(state);
     }
 
     /* While we're at it, vacuum the database. */
     //if (options.action == GCOptions::gcDeleteDead) vacuumDB();
+}
+
+
+void LocalStore::autoGC(bool sync)
+{
+    static auto fakeFreeSpaceFile = getEnv("_NIX_TEST_FREE_SPACE_FILE");
+
+    auto getAvail = [this]() -> uint64_t {
+        if (fakeFreeSpaceFile)
+            return std::stoll(readFile(*fakeFreeSpaceFile));
+
+        struct statvfs st;
+        if (statvfs(realStoreDir.c_str(), &st))
+            throw SysError("getting filesystem info about '%s'", realStoreDir);
+
+        return (uint64_t) st.f_bavail * st.f_frsize;
+    };
+
+    std::shared_future<void> future;
+
+    {
+        auto state(_state.lock());
+
+        if (state->gcRunning) {
+            future = state->gcFuture;
+            debug("waiting for auto-GC to finish");
+            goto sync;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+
+        if (now < state->lastGCCheck + std::chrono::seconds(settings.minFreeCheckInterval)) return;
+
+        auto avail = getAvail();
+
+        state->lastGCCheck = now;
+
+        if (avail >= settings.minFree || avail >= settings.maxFree) return;
+
+        if (avail > state->availAfterGC * 0.97) return;
+
+        state->gcRunning = true;
+
+        std::promise<void> promise;
+        future = state->gcFuture = promise.get_future().share();
+
+        std::thread([promise{std::move(promise)}, this, avail, getAvail]() mutable {
+
+            try {
+
+                /* Wake up any threads waiting for the auto-GC to finish. */
+                Finally wakeup([&]() {
+                    auto state(_state.lock());
+                    state->gcRunning = false;
+                    state->lastGCCheck = std::chrono::steady_clock::now();
+                    promise.set_value();
+                });
+
+                GCOptions options;
+                options.maxFreed = settings.maxFree - avail;
+
+                printInfo("running auto-GC to free %d bytes", options.maxFreed);
+
+                GCResults results;
+
+                collectGarbage(options, results);
+
+                _state.lock()->availAfterGC = getAvail();
+
+            } catch (...) {
+                // FIXME: we could propagate the exception to the
+                // future, but we don't really care.
+                ignoreException();
+            }
+
+        }).detach();
+    }
+
+ sync:
+    // Wait for the future outside of the state lock.
+    if (sync) future.get();
 }
 
 

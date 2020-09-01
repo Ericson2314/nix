@@ -14,7 +14,8 @@
 <varlistentry><term><envar>IN_NIX_SHELL</envar></term>
 
   <listitem><para>Indicator that tells if the current environment was set up by
-  <command>nix-shell</command>.</para></listitem>
+  <command>nix-shell</command>.  Since Nix 2.0 the values are
+  <literal>"pure"</literal> and <literal>"impure"</literal></para></listitem>
 
 </varlistentry>
 
@@ -32,7 +33,7 @@
 
     will cause Nix to look for paths relative to
     <filename>/home/eelco/Dev</filename> and
-    <filename>/etc/nixos</filename>, in that order.  It is also
+    <filename>/etc/nixos</filename>, in this order.  It is also
     possible to match paths against a prefix.  For example, the value
 
     <screen>
@@ -52,10 +53,15 @@ nixpkgs=/home/eelco/Dev/nixpkgs-branch:/etc/nixos</screen>
     <envar>NIX_PATH</envar> to
 
     <screen>
-nixpkgs=https://github.com/NixOS/nixpkgs-channels/archive/nixos-14.12.tar.gz</screen>
+nixpkgs=https://github.com/NixOS/nixpkgs/archive/nixos-15.09.tar.gz</screen>
 
     tells Nix to download the latest revision in the Nixpkgs/NixOS
-    14.12 channel.</para>
+    15.09 channel.</para>
+
+    <para>A following shorthand can be used to refer to the official channels:
+
+    <screen>nixpkgs=channel:nixos-15.09</screen>
+    </para>
 
     <para>The search path can be extended using the <option
     linkend="opt-I">-I</option> option, which takes precedence over
@@ -116,7 +122,7 @@ $ mount -o bind /mnt/otherdisk/nix /nix</screen>
 <varlistentry><term><envar>NIX_LOG_DIR</envar></term>
 
   <listitem><para>Overrides the location of the Nix log directory
-  (default <filename><replaceable>prefix</replaceable>/log/nix</filename>).</para></listitem>
+  (default <filename><replaceable>prefix</replaceable>/var/log/nix</filename>).</para></listitem>
 
 </varlistentry>
 
@@ -131,12 +137,19 @@ $ mount -o bind /mnt/otherdisk/nix /nix</screen>
 
 <varlistentry><term><envar>NIX_CONF_DIR</envar></term>
 
-  <listitem><para>Overrides the location of the Nix configuration
+  <listitem><para>Overrides the location of the system Nix configuration
   directory (default
   <filename><replaceable>prefix</replaceable>/etc/nix</filename>).</para></listitem>
 
 </varlistentry>
 
+<varlistentry><term><envar>NIX_USER_CONF_FILES</envar></term>
+
+  <listitem><para>Overrides the location of the user Nix configuration files
+  to load from (defaults to the XDG spec locations). The variable is treated
+  as a list separated by the <literal>:</literal> token.</para></listitem>
+
+</varlistentry>
 
 <varlistentry><term><envar>TMPDIR</envar></term>
 
@@ -154,6 +167,8 @@ $ mount -o bind /mnt/otherdisk/nix /nix</screen>
   <literal>daemon</literal> if you want to use the Nix daemon to
   execute Nix operations. This is necessary in <link
   linkend="ssec-multi-user">multi-user Nix installations</link>.
+  If the Nix daemon's Unix socket is at some non-standard path,
+  this variable should be set to <literal>unix://path/to/socket</literal>.
   Otherwise, it should be left unset.</para></listitem>
 
 </varlistentry>

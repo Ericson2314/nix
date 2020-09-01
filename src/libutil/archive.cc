@@ -13,23 +13,31 @@
 
 #include "archive.hh"
 #include "util.hh"
-
+#include "config.hh"
 
 namespace nix {
 
+struct ArchiveSettings : Config
+{
+    Setting<bool> useCaseHack{this,
+        #if __APPLE__
+            true,
+        #else
+            false,
+        #endif
+        "use-case-hack",
+        "Whether to enable a Darwin-specific hack for dealing with file name collisions."};
+};
 
-bool useCaseHack =
-#if __APPLE__
-    true;
-#else
-    false;
-#endif
+static ArchiveSettings archiveSettings;
+
+static GlobalConfig::Register r1(&archiveSettings);
 
 const std::string narVersionMagic1 = "nix-archive-1";
 
 static string caseHackSuffix = "~nix~case~hack~";
 
-PathFilter defaultPathFilter;
+PathFilter defaultPathFilter = [](const Path &) { return true; };
 
 
 static void dumpContents(const Path & path, size_t size,
@@ -38,16 +46,16 @@ static void dumpContents(const Path & path, size_t size,
     sink << "contents" << size;
 
     AutoCloseFD fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
-    if (!fd) throw SysError(format("opening file ‘%1%’") % path);
+    if (!fd) throw SysError("opening file '%1%'", path);
 
-    unsigned char buf[65536];
+    std::vector<unsigned char> buf(65536);
     size_t left = size;
 
     while (left > 0) {
-        size_t n = left > sizeof(buf) ? sizeof(buf) : left;
-        readFull(fd.get(), buf, n);
+        auto n = std::min(left, buf.size());
+        readFull(fd.get(), buf.data(), n);
         left -= n;
-        sink(buf, n);
+        sink(buf.data(), n);
     }
 
     writePadding(size, sink);
@@ -56,9 +64,11 @@ static void dumpContents(const Path & path, size_t size,
 
 static void dump(const Path & path, Sink & sink, PathFilter & filter)
 {
+    checkInterrupt();
+
     struct stat st;
     if (lstat(path.c_str(), &st))
-        throw SysError(format("getting attributes of path ‘%1%’") % path);
+        throw SysError("getting attributes of path '%1%'", path);
 
     sink << "(";
 
@@ -72,20 +82,21 @@ static void dump(const Path & path, Sink & sink, PathFilter & filter)
     else if (S_ISDIR(st.st_mode)) {
         sink << "type" << "directory";
 
-        /* If we're on a case-insensitive system like Mac OS X, undo
+        /* If we're on a case-insensitive system like macOS, undo
            the case hack applied by restorePath(). */
         std::map<string, string> unhacked;
         for (auto & i : readDirectory(path))
-            if (useCaseHack) {
+            if (archiveSettings.useCaseHack) {
                 string name(i.name);
                 size_t pos = i.name.find(caseHackSuffix);
                 if (pos != string::npos) {
-                    debug(format("removing case hack suffix from ‘%1%’") % (path + "/" + i.name));
+                    debug(format("removing case hack suffix from '%1%'") % (path + "/" + i.name));
                     name.erase(pos);
                 }
                 if (unhacked.find(name) != unhacked.end())
-                    throw Error(format("file name collision in between ‘%1%’ and ‘%2%’")
-                        % (path + "/" + unhacked[name]) % (path + "/" + i.name));
+                    throw Error("file name collision in between '%1%' and '%2%'",
+                       (path + "/" + unhacked[name]),
+                       (path + "/" + i.name));
                 unhacked[name] = i.name;
             } else
                 unhacked[i.name] = i.name;
@@ -101,7 +112,7 @@ static void dump(const Path & path, Sink & sink, PathFilter & filter)
     else if (S_ISLNK(st.st_mode))
         sink << "type" << "symlink" << "target" << readLink(path);
 
-    else throw Error(format("file ‘%1%’ has an unsupported type") % path);
+    else throw Error("file '%1%' has an unsupported type", path);
 
     sink << ")";
 }
@@ -139,19 +150,19 @@ static void skipGeneric(Source & source)
 
 static void parseContents(ParseSink & sink, Source & source, const Path & path)
 {
-    unsigned long long size = readLongLong(source);
+    uint64_t size = readLongLong(source);
 
     sink.preallocateContents(size);
 
-    unsigned long long left = size;
-    unsigned char buf[65536];
+    uint64_t left = size;
+    std::vector<unsigned char> buf(65536);
 
     while (left) {
         checkInterrupt();
-        unsigned int n = sizeof(buf);
-        if ((unsigned long long) n > left) n = left;
-        source(buf, n);
-        sink.receiveContents(buf, n);
+        auto n = buf.size();
+        if ((uint64_t)n > left) n = left;
+        source(buf.data(), n);
+        sink.receiveContents(buf.data(), n);
         left -= n;
     }
 
@@ -237,21 +248,21 @@ static void parse(ParseSink & sink, Source & source, const Path & path)
                 } else if (s == "name") {
                     name = readString(source);
                     if (name.empty() || name == "." || name == ".." || name.find('/') != string::npos || name.find((char) 0) != string::npos)
-                        throw Error(format("NAR contains invalid file name ‘%1%’") % name);
+                        throw Error("NAR contains invalid file name '%1%'", name);
                     if (name <= prevName)
                         throw Error("NAR directory is not sorted");
                     prevName = name;
-                    if (useCaseHack) {
+                    if (archiveSettings.useCaseHack) {
                         auto i = names.find(name);
                         if (i != names.end()) {
-                            debug(format("case collision between ‘%1%’ and ‘%2%’") % i->first % name);
+                            debug(format("case collision between '%1%' and '%2%'") % i->first % name);
                             name += caseHackSuffix;
                             name += std::to_string(++i->second);
                         } else
                             names[name] = 0;
                     }
                 } else if (s == "node") {
-                    if (s.empty()) throw badArchive("entry name missing");
+                    if (name.empty()) throw badArchive("entry name missing");
                     parse(sink, source, path + "/" + name);
                 } else
                     throw badArchive("unknown field " + s);
@@ -273,7 +284,7 @@ void parseDump(ParseSink & sink, Source & source)
 {
     string version;
     try {
-        version = readString(source);
+        version = readString(source, narVersionMagic1.size());
     } catch (SerialisationError & e) {
         /* This generally means the integer at the start couldn't be
            decoded.  Ignore and throw the exception below. */
@@ -293,14 +304,14 @@ struct RestoreSink : ParseSink
     {
         Path p = dstPath + path;
         if (mkdir(p.c_str(), 0777) == -1)
-            throw SysError(format("creating directory ‘%1%’") % p);
+            throw SysError("creating directory '%1%'", p);
     };
 
     void createRegularFile(const Path & path)
     {
         Path p = dstPath + path;
         fd = open(p.c_str(), O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0666);
-        if (!fd) throw SysError(format("creating file ‘%1%’") % p);
+        if (!fd) throw SysError("creating file '%1%'", p);
     }
 
     void isExecutable()
@@ -312,7 +323,7 @@ struct RestoreSink : ParseSink
             throw SysError("fchmod");
     }
 
-    void preallocateContents(unsigned long long len)
+    void preallocateContents(uint64_t len)
     {
 #if HAVE_POSIX_FALLOCATE
         if (len) {
@@ -321,13 +332,13 @@ struct RestoreSink : ParseSink
                filesystem doesn't support preallocation (e.g. on
                OpenSolaris).  Since preallocation is just an
                optimisation, ignore it. */
-            if (errno && errno != EINVAL)
-                throw SysError(format("preallocating file of %1% bytes") % len);
+            if (errno && errno != EINVAL && errno != EOPNOTSUPP && errno != ENOSYS)
+                throw SysError("preallocating file of %1% bytes", len);
         }
 #endif
     }
 
-    void receiveContents(unsigned char * data, unsigned int len)
+    void receiveContents(unsigned char * data, size_t len)
     {
         writeFull(fd.get(), data, len);
     }
@@ -345,6 +356,28 @@ void restorePath(const Path & path, Source & source)
     RestoreSink sink;
     sink.dstPath = path;
     parseDump(sink, source);
+}
+
+
+void copyNAR(Source & source, Sink & sink)
+{
+    // FIXME: if 'source' is the output of dumpPath() followed by EOF,
+    // we should just forward all data directly without parsing.
+
+    ParseSink parseSink; /* null sink; just parse the NAR */
+
+    TeeSource wrapper { source, sink };
+
+    parseDump(parseSink, wrapper);
+}
+
+
+void copyPath(const Path & from, const Path & to)
+{
+    auto source = sinkToSource([&](Sink & sink) {
+        dumpPath(from, sink);
+    });
+    restorePath(to, *source);
 }
 
 

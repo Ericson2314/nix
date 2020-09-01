@@ -2,18 +2,14 @@
 #include "shared.hh"
 #include "eval.hh"
 #include "attr-path.hh"
+#include "progress-bar.hh"
 
 #include <unistd.h>
 
 using namespace nix;
 
-struct CmdEdit : InstallablesCommand
+struct CmdEdit : InstallableCommand
 {
-    std::string name() override
-    {
-        return "edit";
-    }
-
     std::string description() override
     {
         return "open the Nix expression of a Nix package in $EDITOR";
@@ -24,52 +20,38 @@ struct CmdEdit : InstallablesCommand
         return {
             Example{
                 "To open the Nix expression of the GNU Hello package:",
-                "nix edit nixpkgs.hello"
+                "nix edit nixpkgs#hello"
             },
         };
     }
+
+    Category category() override { return catSecondary; }
 
     void run(ref<Store> store) override
     {
         auto state = getEvalState();
 
-        for (auto & i : installables) {
-            auto v = i->toValue(*state);
+        auto [v, pos] = installable->toValue(*state);
 
-            Value * v2;
-            try {
-                auto dummyArgs = state->allocBindings(0);
-                v2 = findAlongAttrPath(*state, "meta.position", *dummyArgs, *v);
-            } catch (Error &) {
-                throw Error("package ‘%s’ has no source location information", i->what());
-            }
-
-            auto pos = state->forceString(*v2);
-            debug("position is %s", pos);
-
-            auto colon = pos.rfind(':');
-            if (colon == std::string::npos)
-                throw Error("cannot parse meta.position attribute ‘%s’", pos);
-
-            std::string filename(pos, 0, colon);
-            int lineno = std::stoi(std::string(pos, colon + 1));
-
-            auto editor = getEnv("EDITOR", "cat");
-
-            Strings args{editor};
-
-            if (editor.find("emacs") != std::string::npos ||
-                editor.find("nano") != std::string::npos ||
-                editor.find("vim") != std::string::npos)
-                args.push_back(fmt("+%d", lineno));
-
-            args.push_back(filename);
-
-            execvp(editor.c_str(), stringsToCharPtrs(args).data());
-
-            throw SysError("cannot run editor ‘%s’", editor);
+        try {
+            pos = findDerivationFilename(*state, *v, installable->what());
+        } catch (NoPositionInfo &) {
         }
+
+        if (pos == noPos)
+            throw Error("cannot find position information for '%s", installable->what());
+
+        stopProgressBar();
+
+        auto args = editorFor(pos);
+
+        restoreSignals();
+        execvp(args.front().c_str(), stringsToCharPtrs(args).data());
+
+        std::string command;
+        for (const auto &arg : args) command += " '" + arg + "'";
+        throw SysError("cannot run command%s", command);
     }
 };
 
-static RegisterCommand r1(make_ref<CmdEdit>());
+static auto r1 = registerCommand<CmdEdit>("edit");

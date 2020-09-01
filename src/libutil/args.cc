@@ -1,18 +1,32 @@
 #include "args.hh"
 #include "hash.hh"
 
+#include <glob.h>
+
 namespace nix {
 
-Args::FlagMaker Args::mkFlag()
+void Args::addFlag(Flag && flag_)
 {
-    return FlagMaker(*this);
+    auto flag = std::make_shared<Flag>(std::move(flag_));
+    if (flag->handler.arity != ArityAny)
+        assert(flag->handler.arity == flag->labels.size());
+    assert(flag->longName != "");
+    longFlags[flag->longName] = flag;
+    if (flag->shortName) shortFlags[flag->shortName] = flag;
 }
 
-Args::FlagMaker::~FlagMaker()
+bool pathCompletions = false;
+std::shared_ptr<std::set<std::string>> completions;
+
+std::string completionMarker = "___COMPLETE___";
+
+std::optional<std::string> needsCompletion(std::string_view s)
 {
-    assert(flag->longName != "");
-    args.longFlags[flag->longName] = flag;
-    if (flag->shortName) args.shortFlags[flag->shortName] = flag;
+    if (!completions) return {};
+    auto i = s.find(completionMarker);
+    if (i != std::string::npos)
+        return std::string(s.begin(), i);
+    return {};
 }
 
 void Args::parseCmdline(const Strings & _cmdline)
@@ -21,6 +35,14 @@ void Args::parseCmdline(const Strings & _cmdline)
     bool dashDash = false;
 
     Strings cmdline(_cmdline);
+
+    if (auto s = getEnv("NIX_GET_COMPLETIONS")) {
+        size_t n = std::stoi(*s);
+        assert(n > 0 && n <= cmdline.size());
+        *std::next(cmdline.begin(), n - 1) += completionMarker;
+        completions = std::make_shared<decltype(completions)::element_type>();
+        verbosity = lvlError;
+    }
 
     for (auto pos = cmdline.begin(); pos != cmdline.end(); ) {
 
@@ -47,7 +69,7 @@ void Args::parseCmdline(const Strings & _cmdline)
         }
         else if (!dashDash && std::string(arg, 0, 1) == "-") {
             if (!processFlag(pos, cmdline.end()))
-                throw UsageError(format("unrecognised flag ‘%1%’") % arg);
+                throw UsageError("unrecognised flag '%1%'", arg);
         }
         else {
             pendingArgs.push_back(*pos++);
@@ -61,22 +83,22 @@ void Args::parseCmdline(const Strings & _cmdline)
 
 void Args::printHelp(const string & programName, std::ostream & out)
 {
-    std::cout << "Usage: " << programName << " <FLAGS>...";
+    std::cout << fmt(ANSI_BOLD "Usage:" ANSI_NORMAL " %s " ANSI_ITALIC "FLAGS..." ANSI_NORMAL, programName);
     for (auto & exp : expectedArgs) {
         std::cout << renderLabels({exp.label});
         // FIXME: handle arity > 1
-        if (exp.arity == 0) std::cout << "...";
+        if (exp.handler.arity == ArityAny) std::cout << "...";
         if (exp.optional) std::cout << "?";
     }
     std::cout << "\n";
 
     auto s = description();
     if (s != "")
-        std::cout << "\nSummary: " << s << ".\n";
+        std::cout << "\n" ANSI_BOLD "Summary:" ANSI_NORMAL " " << s << ".\n";
 
     if (longFlags.size()) {
         std::cout << "\n";
-        std::cout << "Flags:\n";
+        std::cout << ANSI_BOLD "Flags:" ANSI_NORMAL "\n";
         printFlags(out);
     }
 }
@@ -100,18 +122,33 @@ bool Args::processFlag(Strings::iterator & pos, Strings::iterator end)
 
     auto process = [&](const std::string & name, const Flag & flag) -> bool {
         ++pos;
-        Strings args;
-        for (size_t n = 0 ; n < flag.arity; ++n) {
-            if (pos == end)
-                throw UsageError(format("flag ‘%1%’ requires %2% argument(s)")
-                    % name % flag.arity);
+        std::vector<std::string> args;
+        bool anyCompleted = false;
+        for (size_t n = 0 ; n < flag.handler.arity; ++n) {
+            if (pos == end) {
+                if (flag.handler.arity == ArityAny) break;
+                throw UsageError("flag '%s' requires %d argument(s)", name, flag.handler.arity);
+            }
+            if (flag.completer)
+                if (auto prefix = needsCompletion(*pos)) {
+                    anyCompleted = true;
+                    flag.completer(n, *prefix);
+                }
             args.push_back(*pos++);
         }
-        flag.handler(args);
+        if (!anyCompleted)
+            flag.handler.fun(std::move(args));
         return true;
     };
 
     if (string(*pos, 0, 2) == "--") {
+        if (auto prefix = needsCompletion(*pos)) {
+            for (auto & [name, flag] : longFlags) {
+                if (!hiddenCategories.count(flag->category)
+                    && hasPrefix(name, std::string(*prefix, 2)))
+                    completions->insert("--" + name);
+            }
+        }
         auto i = longFlags.find(string(*pos, 2));
         if (i == longFlags.end()) return false;
         return process("--" + i->first, *i->second);
@@ -124,6 +161,14 @@ bool Args::processFlag(Strings::iterator & pos, Strings::iterator end)
         return process(std::string("-") + c, *i->second);
     }
 
+    if (auto prefix = needsCompletion(*pos)) {
+        if (prefix == "-") {
+            completions->insert("--");
+            for (auto & [flag, _] : shortFlags)
+                completions->insert(std::string("-") + flag);
+        }
+    }
+
     return false;
 }
 
@@ -131,7 +176,7 @@ bool Args::processArgs(const Strings & args, bool finish)
 {
     if (expectedArgs.empty()) {
         if (!args.empty())
-            throw UsageError(format("unexpected argument ‘%1%’") % args.front());
+            throw UsageError("unexpected argument '%1%'", args.front());
         return true;
     }
 
@@ -139,10 +184,17 @@ bool Args::processArgs(const Strings & args, bool finish)
 
     bool res = false;
 
-    if ((exp.arity == 0 && finish) ||
-        (exp.arity > 0 && args.size() == exp.arity))
+    if ((exp.handler.arity == ArityAny && finish) ||
+        (exp.handler.arity != ArityAny && args.size() == exp.handler.arity))
     {
-        exp.handler(args);
+        std::vector<std::string> ss;
+        for (const auto &[n, s] : enumerate(args)) {
+            ss.push_back(s);
+            if (exp.completer)
+                if (auto prefix = needsCompletion(s))
+                    exp.completer(n, *prefix);
+        }
+        exp.handler.fun(ss);
         expectedArgs.pop_front();
         res = true;
     }
@@ -153,13 +205,68 @@ bool Args::processArgs(const Strings & args, bool finish)
     return res;
 }
 
-void Args::mkHashTypeFlag(const std::string & name, HashType * ht)
+static void hashTypeCompleter(size_t index, std::string_view prefix) 
 {
-    mkFlag1(0, name, "TYPE", "hash algorithm (‘md5’, ‘sha1’, ‘sha256’, or ‘sha512’)", [=](std::string s) {
-        *ht = parseHashType(s);
-        if (*ht == htUnknown)
-            throw UsageError(format("unknown hash type ‘%1%’") % s);
-    });
+    for (auto & type : hashTypes)
+        if (hasPrefix(type, prefix))
+            completions->insert(type);
+}
+
+Args::Flag Args::Flag::mkHashTypeFlag(std::string && longName, HashType * ht)
+{
+    return Flag {
+        .longName = std::move(longName),
+        .description = "hash algorithm ('md5', 'sha1', 'sha256', or 'sha512')",
+        .labels = {"hash-algo"},
+        .handler = {[ht](std::string s) {
+            *ht = parseHashType(s);
+        }},
+        .completer = hashTypeCompleter
+    };
+}
+
+Args::Flag Args::Flag::mkHashTypeOptFlag(std::string && longName, std::optional<HashType> * oht)
+{
+    return Flag {
+        .longName = std::move(longName),
+        .description = "hash algorithm ('md5', 'sha1', 'sha256', or 'sha512'). Optional as can also be gotten from SRI hash itself.",
+        .labels = {"hash-algo"},
+        .handler = {[oht](std::string s) {
+            *oht = std::optional<HashType> { parseHashType(s) };
+        }},
+        .completer = hashTypeCompleter
+    };
+}
+
+static void completePath(std::string_view prefix, bool onlyDirs)
+{
+    pathCompletions = true;
+    glob_t globbuf;
+    int flags = GLOB_NOESCAPE | GLOB_TILDE;
+    #ifdef GLOB_ONLYDIR
+    if (onlyDirs)
+        flags |= GLOB_ONLYDIR;
+    #endif
+    if (glob((std::string(prefix) + "*").c_str(), flags, nullptr, &globbuf) == 0) {
+        for (size_t i = 0; i < globbuf.gl_pathc; ++i) {
+            if (onlyDirs) {
+                auto st = lstat(globbuf.gl_pathv[i]);
+                if (!S_ISDIR(st.st_mode)) continue;
+            }
+            completions->insert(globbuf.gl_pathv[i]);
+        }
+        globfree(&globbuf);
+    }
+}
+
+void completePath(size_t, std::string_view prefix)
+{
+    completePath(prefix, false);
+}
+
+void completeDir(size_t, std::string_view prefix)
+{
+    completePath(prefix, true);
 }
 
 Strings argvToStrings(int argc, char * * argv)
@@ -175,7 +282,7 @@ std::string renderLabels(const Strings & labels)
     std::string res;
     for (auto label : labels) {
         for (auto & c : label) c = std::toupper(c);
-        res += " <" + label + ">";
+        res += " " ANSI_ITALIC + label + ANSI_NORMAL;
     }
     return res;
 }
@@ -184,12 +291,100 @@ void printTable(std::ostream & out, const Table2 & table)
 {
     size_t max = 0;
     for (auto & row : table)
-        max = std::max(max, row.first.size());
+        max = std::max(max, filterANSIEscapes(row.first, true).size());
     for (auto & row : table) {
         out << "  " << row.first
-            << std::string(max - row.first.size() + 2, ' ')
+            << std::string(max - filterANSIEscapes(row.first, true).size() + 2, ' ')
             << row.second << "\n";
     }
+}
+
+void Command::printHelp(const string & programName, std::ostream & out)
+{
+    Args::printHelp(programName, out);
+
+    auto exs = examples();
+    if (!exs.empty()) {
+        out << "\n" ANSI_BOLD "Examples:" ANSI_NORMAL "\n";
+        for (auto & ex : exs)
+            out << "\n"
+                << "  " << ex.description << "\n" // FIXME: wrap
+                << "  $ " << ex.command << "\n";
+    }
+}
+
+MultiCommand::MultiCommand(const Commands & commands)
+    : commands(commands)
+{
+    expectArgs({
+        .label = "command",
+        .optional = true,
+        .handler = {[=](std::string s) {
+            assert(!command);
+            if (auto alias = get(deprecatedAliases, s)) {
+                warn("'%s' is a deprecated alias for '%s'", s, *alias);
+                s = *alias;
+            }
+            if (auto prefix = needsCompletion(s)) {
+                for (auto & [name, command] : commands)
+                    if (hasPrefix(name, *prefix))
+                        completions->insert(name);
+            }
+            auto i = commands.find(s);
+            if (i == commands.end())
+                throw UsageError("'%s' is not a recognised command", s);
+            command = {s, i->second()};
+        }}
+    });
+
+    categories[Command::catDefault] = "Available commands";
+}
+
+void MultiCommand::printHelp(const string & programName, std::ostream & out)
+{
+    if (command) {
+        command->second->printHelp(programName + " " + command->first, out);
+        return;
+    }
+
+    out << fmt(ANSI_BOLD "Usage:" ANSI_NORMAL " %s " ANSI_ITALIC "COMMAND FLAGS... ARGS..." ANSI_NORMAL "\n", programName);
+
+    out << "\n" ANSI_BOLD "Common flags:" ANSI_NORMAL "\n";
+    printFlags(out);
+
+    std::map<Command::Category, std::map<std::string, ref<Command>>> commandsByCategory;
+
+    for (auto & [name, commandFun] : commands) {
+        auto command = commandFun();
+        commandsByCategory[command->category()].insert_or_assign(name, command);
+    }
+
+    for (auto & [category, commands] : commandsByCategory) {
+        out << fmt("\n" ANSI_BOLD "%s:" ANSI_NORMAL "\n", categories[category]);
+
+        Table2 table;
+        for (auto & [name, command] : commands) {
+            auto descr = command->description();
+            if (!descr.empty())
+                table.push_back(std::make_pair(name, descr));
+        }
+        printTable(out, table);
+    }
+}
+
+bool MultiCommand::processFlag(Strings::iterator & pos, Strings::iterator end)
+{
+    if (Args::processFlag(pos, end)) return true;
+    if (command && command->second->processFlag(pos, end)) return true;
+    return false;
+}
+
+bool MultiCommand::processArgs(const Strings & args, bool finish)
+{
+    if (command)
+        return command->second->processArgs(args, finish);
+    else
+        return Args::processArgs(args, finish);
 }
 
 }

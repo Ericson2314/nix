@@ -1,26 +1,15 @@
 # Run program $1 as part of ‘make installcheck’.
+
+test-deps =
+
 define run-install-test
 
-  installcheck: $1
+  installcheck: $1.test
 
-  _installcheck-list += $1
+  .PHONY: $1.test
+  $1.test: $1 $(test-deps)
+	@env TEST_NAME=$(notdir $(basename $1)) TESTS_ENVIRONMENT="$(tests-environment)" mk/run_test.sh $1 < /dev/null
 
 endef
-
-installcheck:
-	@total=0; failed=0; for i in $(_installcheck-list); do \
-	  total=$$((total + 1)); \
-	  echo "running test $$i"; \
-	  if (cd $$(dirname $$i) && $(tests-environment) $$(basename $$i)); then \
-	    echo "PASS: $$i"; \
-	  else \
-	    echo "FAIL: $$i"; \
-	    failed=$$((failed + 1)); \
-	  fi; \
-	done; \
-	if [ "$$failed" != 0 ]; then \
-	  echo "$$failed out of $$total tests failed "; \
-	  exit 1; \
-	fi
 
 .PHONY: check installcheck

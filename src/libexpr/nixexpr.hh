@@ -2,6 +2,7 @@
 
 #include "value.hh"
 #include "symbol-table.hh"
+#include "error.hh"
 
 #include <map>
 
@@ -9,26 +10,26 @@
 namespace nix {
 
 
-MakeError(EvalError, Error)
-MakeError(ParseError, Error)
-MakeError(IncompleteParseError, ParseError)
-MakeError(AssertionError, EvalError)
-MakeError(ThrownError, AssertionError)
-MakeError(Abort, EvalError)
-MakeError(TypeError, EvalError)
-MakeError(UndefinedVarError, Error)
-MakeError(RestrictedPathError, Error)
+MakeError(EvalError, Error);
+MakeError(ParseError, Error);
+MakeError(AssertionError, EvalError);
+MakeError(ThrownError, AssertionError);
+MakeError(Abort, EvalError);
+MakeError(TypeError, EvalError);
+MakeError(UndefinedVarError, Error);
+MakeError(RestrictedPathError, Error);
 
 
 /* Position objects. */
 
 struct Pos
 {
+    FileOrigin origin;
     Symbol file;
     unsigned int line, column;
-    Pos() : line(0), column(0) { };
-    Pos(const Symbol & file, unsigned int line, unsigned int column)
-        : file(file), line(line), column(column) { };
+    Pos() : origin(foString), line(0), column(0) { };
+    Pos(FileOrigin origin, const Symbol & file, unsigned int line, unsigned int column)
+        : origin(origin), file(file), line(line), column(column) { };
     operator bool() const
     {
         return line != 0;
@@ -76,17 +77,17 @@ string showAttrPath(const AttrPath & attrPath);
 struct Expr
 {
     virtual ~Expr() { };
-    virtual void show(std::ostream & str);
+    virtual void show(std::ostream & str) const;
     virtual void bindVars(const StaticEnv & env);
     virtual void eval(EvalState & state, Env & env, Value & v);
     virtual Value * maybeThunk(EvalState & state, Env & env);
     virtual void setName(Symbol & name);
 };
 
-std::ostream & operator << (std::ostream & str, Expr & e);
+std::ostream & operator << (std::ostream & str, const Expr & e);
 
 #define COMMON_METHODS \
-    void show(std::ostream & str); \
+    void show(std::ostream & str) const; \
     void eval(EvalState & state, Env & env, Value & v); \
     void bindVars(const StaticEnv & env);
 
@@ -210,9 +211,10 @@ struct ExprList : Expr
 
 struct Formal
 {
+    Pos pos;
     Symbol name;
     Expr * def;
-    Formal(const Symbol & name, Expr * def) : name(name), def(def) { };
+    Formal(const Pos & pos, const Symbol & name, Expr * def) : pos(pos), name(name), def(def) { };
 };
 
 struct Formals
@@ -235,8 +237,10 @@ struct ExprLambda : Expr
         : pos(pos), arg(arg), matchAttrs(matchAttrs), formals(formals), body(body)
     {
         if (!arg.empty() && formals && formals->argNames.find(arg) != formals->argNames.end())
-            throw ParseError(format("duplicate formal function argument ‘%1%’ at %2%")
-                % arg % pos);
+            throw ParseError({
+                .hint = hintfmt("duplicate formal function argument '%1%'", arg),
+                .errPos = pos
+            });
     };
     void setName(Symbol & name);
     string showNamePos() const;
@@ -255,15 +259,16 @@ struct ExprWith : Expr
 {
     Pos pos;
     Expr * attrs, * body;
-    unsigned int prevWith;
+    size_t prevWith;
     ExprWith(const Pos & pos, Expr * attrs, Expr * body) : pos(pos), attrs(attrs), body(body) { };
     COMMON_METHODS
 };
 
 struct ExprIf : Expr
 {
+    Pos pos;
     Expr * cond, * then, * else_;
-    ExprIf(Expr * cond, Expr * then, Expr * else_) : cond(cond), then(then), else_(else_) { };
+    ExprIf(const Pos & pos, Expr * cond, Expr * then, Expr * else_) : pos(pos), cond(cond), then(then), else_(else_) { };
     COMMON_METHODS
 };
 
@@ -283,13 +288,13 @@ struct ExprOpNot : Expr
 };
 
 #define MakeBinOp(name, s) \
-    struct Expr##name : Expr \
+    struct name : Expr \
     { \
         Pos pos; \
         Expr * e1, * e2; \
-        Expr##name(Expr * e1, Expr * e2) : e1(e1), e2(e2) { }; \
-        Expr##name(const Pos & pos, Expr * e1, Expr * e2) : pos(pos), e1(e1), e2(e2) { }; \
-        void show(std::ostream & str) \
+        name(Expr * e1, Expr * e2) : e1(e1), e2(e2) { }; \
+        name(const Pos & pos, Expr * e1, Expr * e2) : pos(pos), e1(e1), e2(e2) { }; \
+        void show(std::ostream & str) const \
         { \
             str << "(" << *e1 << " " s " " << *e2 << ")";   \
         } \
@@ -300,14 +305,14 @@ struct ExprOpNot : Expr
         void eval(EvalState & state, Env & env, Value & v); \
     };
 
-MakeBinOp(App, "")
-MakeBinOp(OpEq, "==")
-MakeBinOp(OpNEq, "!=")
-MakeBinOp(OpAnd, "&&")
-MakeBinOp(OpOr, "||")
-MakeBinOp(OpImpl, "->")
-MakeBinOp(OpUpdate, "//")
-MakeBinOp(OpConcatLists, "++")
+MakeBinOp(ExprApp, "")
+MakeBinOp(ExprOpEq, "==")
+MakeBinOp(ExprOpNEq, "!=")
+MakeBinOp(ExprOpAnd, "&&")
+MakeBinOp(ExprOpOr, "||")
+MakeBinOp(ExprOpImpl, "->")
+MakeBinOp(ExprOpUpdate, "//")
+MakeBinOp(ExprOpConcatLists, "++")
 
 struct ExprConcatStrings : Expr
 {

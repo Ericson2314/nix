@@ -11,10 +11,6 @@ $logDir = $ENV{"NIX_LOG_DIR"} || "@nixlocalstatedir@/log/nix";
 $confDir = $ENV{"NIX_CONF_DIR"} || "@nixsysconfdir@/nix";
 $storeDir = $ENV{"NIX_STORE_DIR"} || "@nixstoredir@";
 
-$bzip2 = "@bzip2@";
-$xz = "@xz@";
-$curl = "@curl@";
-
 $useBindings = 1;
 
 %config = ();
@@ -23,7 +19,7 @@ sub readConfig {
     my $config = "$confDir/nix.conf";
     return unless -f $config;
 
-    open CONFIG, "<$config" or die "cannot open ‘$config’";
+    open CONFIG, "<$config" or die "cannot open '$config'";
     while (<CONFIG>) {
         /^\s*([\w\-\.]+)\s*=\s*(.*)$/ or next;
         $config{$1} = $2;

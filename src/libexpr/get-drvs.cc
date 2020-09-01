@@ -1,6 +1,7 @@
 #include "get-drvs.hh"
 #include "util.hh"
 #include "eval-inline.hh"
+#include "store-api.hh"
 
 #include <cstring>
 #include <regex>
@@ -12,6 +13,33 @@ namespace nix {
 DrvInfo::DrvInfo(EvalState & state, const string & attrPath, Bindings * attrs)
     : state(&state), attrs(attrs), attrPath(attrPath)
 {
+}
+
+
+DrvInfo::DrvInfo(EvalState & state, ref<Store> store, const std::string & drvPathWithOutputs)
+    : state(&state), attrs(nullptr), attrPath("")
+{
+    auto [drvPath, selectedOutputs] = store->parsePathWithOutputs(drvPathWithOutputs);
+
+    this->drvPath = store->printStorePath(drvPath);
+
+    auto drv = store->derivationFromPath(drvPath);
+
+    name = drvPath.name();
+
+    if (selectedOutputs.size() > 1)
+        throw Error("building more than one derivation output is not supported, in '%s'", drvPathWithOutputs);
+
+    outputName =
+        selectedOutputs.empty()
+        ? get(drv.env, "outputName").value_or("out")
+        : *selectedOutputs.begin();
+
+    auto i = drv.outputs.find(outputName);
+    if (i == drv.outputs.end())
+        throw Error("derivation '%s' does not have output '%s'", store->printStorePath(drvPath), outputName);
+
+    outPath = store->printStorePath(i->second.path(*store, drv.name));
 }
 
 
@@ -89,7 +117,7 @@ DrvInfo::Outputs DrvInfo::queryOutputs(bool onlyOutputsToInstall)
     /* Check for `meta.outputsToInstall` and return `outputs` reduced to that. */
     const Value * outTI = queryMeta("outputsToInstall");
     if (!outTI) return outputs;
-    const auto errMsg = Error("this derivation has bad ‘meta.outputsToInstall’");
+    const auto errMsg = Error("this derivation has bad 'meta.outputsToInstall'");
         /* ^ this shows during `nix-env -i` right under the bad derivation */
     if (!outTI->isList()) throw errMsg;
     Outputs result;
@@ -249,8 +277,7 @@ static bool getDerivation(EvalState & state, Value & v,
 
         /* Remove spurious duplicates (e.g., a set like `rec { x =
            derivation {...}; y = x;}'. */
-        if (done.find(v.attrs) != done.end()) return false;
-        done.insert(v.attrs);
+        if (!done.insert(v.attrs).second) return false;
 
         DrvInfo drv(state, attrPath, v.attrs);
 
@@ -267,7 +294,7 @@ static bool getDerivation(EvalState & state, Value & v,
 }
 
 
-std::experimental::optional<DrvInfo> getDerivation(EvalState & state, Value & v,
+std::optional<DrvInfo> getDerivation(EvalState & state, Value & v,
     bool ignoreAssertionFailures)
 {
     Done done;
@@ -310,7 +337,7 @@ static void getDerivations(EvalState & state, Value & vIn,
            bound to the attribute with the "lower" name should take
            precedence). */
         for (auto & i : v.attrs->lexicographicOrder()) {
-            debug("evaluating attribute ‘%1%’", i->name);
+            debug("evaluating attribute '%1%'", i->name);
             if (!std::regex_match(std::string(i->name), attrRegex))
                 continue;
             string pathPrefix2 = addToPath(pathPrefix, i->name);
@@ -321,7 +348,7 @@ static void getDerivations(EvalState & state, Value & vIn,
                    should we recurse into it?  => Only if it has a
                    `recurseForDerivations = true' attribute. */
                 if (i->value->type == tAttrs) {
-                    Bindings::iterator j = i->value->attrs->find(state.symbols.create("recurseForDerivations"));
+                    Bindings::iterator j = i->value->attrs->find(state.sRecurseForDerivations);
                     if (j != i->value->attrs->end() && state.forceBool(*j->value, *j->pos))
                         getDerivations(state, *i->value, pathPrefix2, autoArgs, drvs, done, ignoreAssertionFailures);
                 }

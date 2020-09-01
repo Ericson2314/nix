@@ -10,6 +10,7 @@ class SSHMaster
 private:
 
     const std::string host;
+    bool fakeSSH;
     const std::string keyFile;
     const bool useMaster;
     const bool compress;
@@ -28,14 +29,7 @@ private:
 
 public:
 
-    SSHMaster(const std::string & host, const std::string & keyFile, bool useMaster, bool compress, int logFD = -1)
-        : host(host)
-        , keyFile(keyFile)
-        , useMaster(useMaster)
-        , compress(compress)
-        , logFD(logFD)
-    {
-    }
+    SSHMaster(const std::string & host, const std::string & keyFile, bool useMaster, bool compress, int logFD = -1);
 
     struct Connection
     {

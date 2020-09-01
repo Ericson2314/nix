@@ -6,33 +6,37 @@
 #include "get-drvs.hh"
 #include "common-args.hh"
 #include "json.hh"
+#include "shared.hh"
+#include "eval-cache.hh"
+#include "attr-path.hh"
 
 #include <regex>
+#include <fstream>
 
 using namespace nix;
 
-std::string hilite(const std::string & s, const std::smatch & m)
+std::string wrap(std::string prefix, std::string s)
+{
+    return prefix + s + ANSI_NORMAL;
+}
+
+std::string hilite(const std::string & s, const std::smatch & m, std::string postfix)
 {
     return
         m.empty()
         ? s
         : std::string(m.prefix())
-          + ANSI_RED + std::string(m.str()) + ANSI_NORMAL
+          + ANSI_GREEN + std::string(m.str()) + postfix
           + std::string(m.suffix());
 }
 
-struct CmdSearch : SourceExprCommand, MixJSON
+struct CmdSearch : InstallableCommand, MixJSON
 {
-    std::string re;
+    std::vector<std::string> res;
 
     CmdSearch()
     {
-        expectArg("regex", &re, true);
-    }
-
-    std::string name() override
-    {
-        return "search";
+        expectArgs("regex", &res);
     }
 
     std::string description() override
@@ -40,112 +44,145 @@ struct CmdSearch : SourceExprCommand, MixJSON
         return "query available packages";
     }
 
+    Examples examples() override
+    {
+        return {
+            Example{
+                "To show all packages in the flake in the current directory:",
+                "nix search"
+            },
+            Example{
+                "To show packages in the 'nixpkgs' flake containing 'blender' in its name or description:",
+                "nix search nixpkgs blender"
+            },
+            Example{
+                "To search for Firefox or Chromium:",
+                "nix search nixpkgs 'firefox|chromium'"
+            },
+            Example{
+                "To search for packages containing 'git' and either 'frontend' or 'gui':",
+                "nix search nixpkgs git 'frontend|gui'"
+            }
+        };
+    }
+
+    Strings getDefaultFlakeAttrPaths() override
+    {
+        return {
+            "packages." + settings.thisSystem.get() + ".",
+            "legacyPackages." + settings.thisSystem.get() + "."
+        };
+    }
+
     void run(ref<Store> store) override
     {
         settings.readOnlyMode = true;
 
-        std::regex regex(re, std::regex::extended | std::regex::icase);
+        // Empty search string should match all packages
+        // Use "^" here instead of ".*" due to differences in resulting highlighting
+        // (see #1893 -- libc++ claims empty search string is not in POSIX grammar)
+        if (res.empty())
+            res.push_back("^");
+
+        std::vector<std::regex> regexes;
+        regexes.reserve(res.size());
+
+        for (auto & re : res)
+            regexes.push_back(std::regex(re, std::regex::extended | std::regex::icase));
 
         auto state = getEvalState();
 
-        std::function<void(Value *, std::string, bool)> doExpr;
+        auto jsonOut = json ? std::make_unique<JSONObject>(std::cout) : nullptr;
 
-        bool first = true;
+        uint64_t results = 0;
 
-        auto jsonOut = json ? std::make_unique<JSONObject>(std::cout, true) : nullptr;
+        std::function<void(eval_cache::AttrCursor & cursor, const std::vector<Symbol> & attrPath)> visit;
 
-        auto sToplevel = state->symbols.create("_toplevel");
-
-        doExpr = [&](Value * v, std::string attrPath, bool toplevel) {
-            debug("at attribute ‘%s’", attrPath);
-
+        visit = [&](eval_cache::AttrCursor & cursor, const std::vector<Symbol> & attrPath)
+        {
+            Activity act(*logger, lvlInfo, actUnknown,
+                fmt("evaluating '%s'", concatStringsSep(".", attrPath)));
             try {
+                auto recurse = [&]()
+                {
+                    for (const auto & attr : cursor.getAttrs()) {
+                        auto cursor2 = cursor.getAttr(attr);
+                        auto attrPath2(attrPath);
+                        attrPath2.push_back(attr);
+                        visit(*cursor2, attrPath2);
+                    }
+                };
 
-                state->forceValue(*v);
+                if (cursor.isDerivation()) {
+                    size_t found = 0;
 
-                if (v->type == tLambda && toplevel) {
-                    Value * v2 = state->allocValue();
-                    state->autoCallFunction(*state->allocBindings(1), *v, *v2);
-                    v = v2;
-                    state->forceValue(*v);
-                }
+                    DrvName name(cursor.getAttr("name")->getString());
 
-                if (state->isDerivation(*v)) {
-
-                    DrvInfo drv(*state, attrPath, v->attrs);
-
-                    DrvName parsed(drv.queryName());
+                    auto aMeta = cursor.maybeGetAttr("meta");
+                    auto aDescription = aMeta ? aMeta->maybeGetAttr("description") : nullptr;
+                    auto description = aDescription ? aDescription->getString() : "";
+                    std::replace(description.begin(), description.end(), '\n', ' ');
+                    auto attrPath2 = concatStringsSep(".", attrPath);
 
                     std::smatch attrPathMatch;
-                    std::regex_search(attrPath, attrPathMatch, regex);
-
-                    auto name = parsed.name;
-                    std::smatch nameMatch;
-                    std::regex_search(name, nameMatch, regex);
-
-                    std::string description = drv.queryMetaString("description");
-                    std::replace(description.begin(), description.end(), '\n', ' ');
                     std::smatch descriptionMatch;
-                    std::regex_search(description, descriptionMatch, regex);
+                    std::smatch nameMatch;
 
-                    if (!attrPathMatch.empty()
-                        || !nameMatch.empty()
-                        || !descriptionMatch.empty())
-                    {
+                    for (auto & regex : regexes) {
+                        std::regex_search(attrPath2, attrPathMatch, regex);
+                        std::regex_search(name.name, nameMatch, regex);
+                        std::regex_search(description, descriptionMatch, regex);
+                        if (!attrPathMatch.empty()
+                            || !nameMatch.empty()
+                            || !descriptionMatch.empty())
+                            found++;
+                    }
+
+                    if (found == res.size()) {
+                        results++;
                         if (json) {
-
-                            auto jsonElem = jsonOut->object(attrPath);
-
-                            jsonElem.attr("pkgName", parsed.name);
-                            jsonElem.attr("version", parsed.version);
+                            auto jsonElem = jsonOut->object(attrPath2);
+                            jsonElem.attr("pname", name.name);
+                            jsonElem.attr("version", name.version);
                             jsonElem.attr("description", description);
-
                         } else {
-                            if (!first) std::cout << "\n";
-                            first = false;
-
-                            std::cout << fmt(
-                                "Attribute name: %s\n"
-                                "Package name: %s\n"
-                                "Version: %s\n"
-                                "Description: %s\n",
-                                hilite(attrPath, attrPathMatch),
-                                hilite(name, nameMatch),
-                                parsed.version,
-                                hilite(description, descriptionMatch));
+                            auto name2 = hilite(name.name, nameMatch, "\e[0;2m");
+                            if (results > 1) logger->stdout("");
+                            logger->stdout(
+                                "* %s%s",
+                                wrap("\e[0;1m", hilite(attrPath2, attrPathMatch, "\e[0;1m")),
+                                name.version != "" ? " (" + name.version + ")" : "");
+                            if (description != "")
+                                logger->stdout(
+                                    "  %s", hilite(description, descriptionMatch, ANSI_NORMAL));
                         }
                     }
                 }
 
-                else if (v->type == tAttrs) {
+                else if (
+                    attrPath.size() == 0
+                    || (attrPath[0] == "legacyPackages" && attrPath.size() <= 2)
+                    || (attrPath[0] == "packages" && attrPath.size() <= 2))
+                    recurse();
 
-                    if (!toplevel) {
-                        auto attrs = v->attrs;
-                        Bindings::iterator j = attrs->find(state->symbols.create("recurseForDerivations"));
-                        if (j == attrs->end() || !state->forceBool(*j->value, *j->pos)) return;
-                    }
-
-                    Bindings::iterator j = v->attrs->find(sToplevel);
-                    bool toplevel2 = j != v->attrs->end() && state->forceBool(*j->value, *j->pos);
-
-                    for (auto & i : *v->attrs) {
-                        doExpr(i.value,
-                            attrPath == "" ? (std::string) i.name : attrPath + "." + (std::string) i.name,
-                            toplevel2);
-                    }
+                else if (attrPath[0] == "legacyPackages" && attrPath.size() > 2) {
+                    auto attr = cursor.maybeGetAttr(state->sRecurseForDerivations);
+                    if (attr && attr->getBool())
+                        recurse();
                 }
 
-            } catch (AssertionError & e) {
-            } catch (Error & e) {
-                if (!toplevel) {
-                    e.addPrefix(fmt("While evaluating the attribute ‘%s’:\n", attrPath));
+            } catch (EvalError & e) {
+                if (!(attrPath.size() > 0 && attrPath[0] == "legacyPackages"))
                     throw;
-                }
             }
         };
 
-        doExpr(getSourceExpr(*state), "", true);
+        for (auto & [cursor, prefix] : installable->getCursors(*state))
+            visit(*cursor, parseAttrPath(*state, prefix));
+
+        if (!json && !results)
+            throw Error("no results for the given search term(s)!");
     }
 };
 
-static RegisterCommand r1(make_ref<CmdSearch>());
+static auto r1 = registerCommand<CmdSearch>("search");

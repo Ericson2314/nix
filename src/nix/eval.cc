@@ -5,27 +5,59 @@
 #include "eval.hh"
 #include "json.hh"
 #include "value-to-json.hh"
+#include "progress-bar.hh"
 
 using namespace nix;
 
-struct CmdEval : MixJSON, InstallablesCommand
+struct CmdEval : MixJSON, InstallableCommand
 {
     bool raw = false;
+    std::optional<std::string> apply;
 
     CmdEval()
     {
         mkFlag(0, "raw", "print strings unquoted", &raw);
-    }
 
-    std::string name() override
-    {
-        return "eval";
+        addFlag({
+            .longName = "apply",
+            .description = "apply a function to each argument",
+            .labels = {"expr"},
+            .handler = {&apply},
+        });
     }
 
     std::string description() override
     {
         return "evaluate a Nix expression";
     }
+
+    Examples examples() override
+    {
+        return {
+            {
+                "To evaluate a Nix expression given on the command line:",
+                "nix eval --expr '1 + 2'"
+            },
+            {
+                "To evaluate a Nix expression from a file or URI:",
+                "nix eval -f ./my-nixpkgs hello.name"
+            },
+            {
+                "To get the current version of Nixpkgs:",
+                "nix eval --raw nixpkgs#lib.version"
+            },
+            {
+                "To print the store path of the Hello package:",
+                "nix eval --raw nixpkgs#hello"
+            },
+            {
+                "To get a list of checks in the 'nix' flake:",
+                "nix eval nix#checks.x86_64-linux --apply builtins.attrNames"
+            },
+        };
+    }
+
+    Category category() override { return catSecondary; }
 
     void run(ref<Store> store) override
     {
@@ -34,22 +66,28 @@ struct CmdEval : MixJSON, InstallablesCommand
 
         auto state = getEvalState();
 
-        auto jsonOut = json ? std::make_unique<JSONList>(std::cout) : nullptr;
+        auto v = installable->toValue(*state).first;
+        PathSet context;
 
-        for (auto & i : installables) {
-            auto v = i->toValue(*state);
-            if (raw) {
-                std::cout << state->forceString(*v);
-            } else if (json) {
-                PathSet context;
-                auto jsonElem = jsonOut->placeholder();
-                printValueAsJSON(*state, true, *v, jsonElem, context);
-            } else {
-                state->forceValueDeep(*v);
-                std::cout << *v << "\n";
-            }
+        if (apply) {
+            auto vApply = state->allocValue();
+            state->eval(state->parseExprFromString(*apply, absPath(".")), *vApply);
+            auto vRes = state->allocValue();
+            state->callFunction(*vApply, *v, *vRes, noPos);
+            v = vRes;
+        }
+
+        if (raw) {
+            stopProgressBar();
+            std::cout << state->coerceToString(noPos, *v, context);
+        } else if (json) {
+            JSONPlaceholder jsonOut(std::cout);
+            printValueAsJSON(*state, true, *v, jsonOut, context);
+        } else {
+            state->forceValueDeep(*v);
+            logger->stdout("%s", *v);
         }
     }
 };
 
-static RegisterCommand r1(make_ref<CmdEval>());
+static auto r1 = registerCommand<CmdEval>("eval");

@@ -8,8 +8,6 @@
 
 namespace nix {
 
-MakeError(UsageError, Error);
-
 enum HashType : char;
 
 class Args
@@ -26,17 +24,72 @@ public:
 
 protected:
 
+    static const size_t ArityAny = std::numeric_limits<size_t>::max();
+
+    struct Handler
+    {
+        std::function<void(std::vector<std::string>)> fun;
+        size_t arity;
+
+        Handler() {}
+
+        Handler(std::function<void(std::vector<std::string>)> && fun)
+            : fun(std::move(fun))
+            , arity(ArityAny)
+        { }
+
+        Handler(std::function<void()> && handler)
+            : fun([handler{std::move(handler)}](std::vector<std::string>) { handler(); })
+            , arity(0)
+        { }
+
+        Handler(std::function<void(std::string)> && handler)
+            : fun([handler{std::move(handler)}](std::vector<std::string> ss) {
+                handler(std::move(ss[0]));
+              })
+            , arity(1)
+        { }
+
+        Handler(std::function<void(std::string, std::string)> && handler)
+            : fun([handler{std::move(handler)}](std::vector<std::string> ss) {
+                handler(std::move(ss[0]), std::move(ss[1]));
+              })
+            , arity(2)
+        { }
+
+        Handler(std::vector<std::string> * dest)
+            : fun([=](std::vector<std::string> ss) { *dest = ss; })
+            , arity(ArityAny)
+        { }
+
+        template<class T>
+        Handler(T * dest)
+            : fun([=](std::vector<std::string> ss) { *dest = ss[0]; })
+            , arity(1)
+        { }
+
+        template<class T>
+        Handler(T * dest, const T & val)
+            : fun([=](std::vector<std::string> ss) { *dest = val; })
+            , arity(0)
+        { }
+    };
+
     /* Flags. */
     struct Flag
     {
         typedef std::shared_ptr<Flag> ptr;
+
         std::string longName;
         char shortName = 0;
         std::string description;
-        Strings labels;
-        size_t arity = 0;
-        std::function<void(Strings)> handler;
         std::string category;
+        Strings labels;
+        Handler handler;
+        std::function<void(size_t, std::string_view)> completer;
+
+        static Flag mkHashTypeFlag(std::string && longName, HashType * ht);
+        static Flag mkHashTypeOptFlag(std::string && longName, std::optional<HashType> * oht);
     };
 
     std::map<std::string, Flag::ptr> longFlags;
@@ -50,9 +103,9 @@ protected:
     struct ExpectedArg
     {
         std::string label;
-        size_t arity; // 0 = any
-        bool optional;
-        std::function<void(Strings)> handler;
+        bool optional = false;
+        Handler handler;
+        std::function<void(size_t, std::string_view)> completer;
     };
 
     std::list<ExpectedArg> expectedArgs;
@@ -63,49 +116,22 @@ protected:
 
 public:
 
-    class FlagMaker
-    {
-        Args & args;
-        Flag::ptr flag;
-        friend class Args;
-        FlagMaker(Args & args) : args(args), flag(std::make_shared<Flag>()) { };
-    public:
-        ~FlagMaker();
-        FlagMaker & longName(const std::string & s) { flag->longName = s; return *this; };
-        FlagMaker & shortName(char s) { flag->shortName = s; return *this; };
-        FlagMaker & description(const std::string & s) { flag->description = s; return *this; };
-        FlagMaker & labels(const Strings & ls) { flag->labels = ls; return *this; };
-        FlagMaker & arity(size_t arity) { flag->arity = arity; return *this; };
-        FlagMaker & handler(std::function<void(Strings)> handler) { flag->handler = handler; return *this; };
-        FlagMaker & category(const std::string & s) { flag->category = s; return *this; };
-    };
-
-    FlagMaker mkFlag();
+    void addFlag(Flag && flag);
 
     /* Helper functions for constructing flags / positional
        arguments. */
-
-    void mkFlag(char shortName, const std::string & longName,
-        const std::string & description, std::function<void()> fun)
-    {
-        mkFlag()
-            .shortName(shortName)
-            .longName(longName)
-            .description(description)
-            .handler(std::bind(fun));
-    }
 
     void mkFlag1(char shortName, const std::string & longName,
         const std::string & label, const std::string & description,
         std::function<void(std::string)> fun)
     {
-        mkFlag()
-            .shortName(shortName)
-            .longName(longName)
-            .labels({label})
-            .description(description)
-            .arity(1)
-            .handler([=](Strings ss) { fun(ss.front()); });
+        addFlag({
+            .longName = longName,
+            .shortName = shortName,
+            .description = description,
+            .labels = {label},
+            .handler = {[=](std::string s) { fun(s); }}
+        });
     }
 
     void mkFlag(char shortName, const std::string & name,
@@ -114,26 +140,16 @@ public:
         mkFlag(shortName, name, description, dest, true);
     }
 
-    void mkFlag(char shortName, const std::string & longName,
-        const std::string & label, const std::string & description,
-        string * dest)
-    {
-        mkFlag1(shortName, longName, label, description, [=](std::string s) {
-            *dest = s;
-        });
-    }
-
-    void mkHashTypeFlag(const std::string & name, HashType * ht);
-
     template<class T>
     void mkFlag(char shortName, const std::string & longName, const std::string & description,
         T * dest, const T & value)
     {
-        mkFlag()
-            .shortName(shortName)
-            .longName(longName)
-            .description(description)
-            .handler([=](Strings ss) { *dest = value; });
+        addFlag({
+            .longName = longName,
+            .shortName = shortName,
+            .description = description,
+            .handler = {[=]() { *dest = value; }}
+        });
     }
 
     template<class I>
@@ -149,37 +165,100 @@ public:
     void mkFlag(char shortName, const std::string & longName,
         const std::string & description, std::function<void(I)> fun)
     {
-        mkFlag()
-            .shortName(shortName)
-            .longName(longName)
-            .labels({"N"})
-            .description(description)
-            .arity(1)
-            .handler([=](Strings ss) {
+        addFlag({
+            .longName = longName,
+            .shortName = shortName,
+            .description = description,
+            .labels = {"N"},
+            .handler = {[=](std::string s) {
                 I n;
-                if (!string2Int(ss.front(), n))
-                    throw UsageError(format("flag ‘--%1%’ requires a integer argument") % longName);
+                if (!string2Int(s, n))
+                    throw UsageError("flag '--%s' requires a integer argument", longName);
                 fun(n);
-            });
+            }}
+        });
+    }
+
+    void expectArgs(ExpectedArg && arg)
+    {
+        expectedArgs.emplace_back(std::move(arg));
     }
 
     /* Expect a string argument. */
     void expectArg(const std::string & label, string * dest, bool optional = false)
     {
-        expectedArgs.push_back(ExpectedArg{label, 1, optional, [=](Strings ss) {
-            *dest = ss.front();
-        }});
+        expectArgs({
+            .label = label,
+            .optional = true,
+            .handler = {dest}
+        });
     }
 
     /* Expect 0 or more arguments. */
-    void expectArgs(const std::string & label, Strings * dest)
+    void expectArgs(const std::string & label, std::vector<std::string> * dest)
     {
-        expectedArgs.push_back(ExpectedArg{label, 0, false, [=](Strings ss) {
-            *dest = ss;
-        }});
+        expectArgs({
+            .label = label,
+            .handler = {dest}
+        });
     }
 
     friend class MultiCommand;
+};
+
+/* A command is an argument parser that can be executed by calling its
+   run() method. */
+struct Command : virtual Args
+{
+    friend class MultiCommand;
+
+    virtual ~Command() { }
+
+    virtual void prepare() { };
+    virtual void run() = 0;
+
+    struct Example
+    {
+        std::string description;
+        std::string command;
+    };
+
+    typedef std::list<Example> Examples;
+
+    virtual Examples examples() { return Examples(); }
+
+    typedef int Category;
+
+    static constexpr Category catDefault = 0;
+
+    virtual Category category() { return catDefault; }
+
+    void printHelp(const string & programName, std::ostream & out) override;
+};
+
+typedef std::map<std::string, std::function<ref<Command>()>> Commands;
+
+/* An argument parser that supports multiple subcommands,
+   i.e. ‘<command> <subcommand>’. */
+class MultiCommand : virtual Args
+{
+public:
+    Commands commands;
+
+    std::map<Command::Category, std::string> categories;
+
+    std::map<std::string, std::string> deprecatedAliases;
+
+    // Selected command, if any.
+    std::optional<std::pair<std::string, ref<Command>>> command;
+
+    MultiCommand(const Commands & commands);
+
+    void printHelp(const string & programName, std::ostream & out) override;
+
+    bool processFlag(Strings::iterator & pos, Strings::iterator end) override;
+
+    bool processArgs(const Strings & args, bool finish) override;
 };
 
 Strings argvToStrings(int argc, char * * argv);
@@ -191,5 +270,14 @@ std::string renderLabels(const Strings & labels);
 typedef std::vector<std::pair<std::string, std::string>> Table2;
 
 void printTable(std::ostream & out, const Table2 & table);
+
+extern std::shared_ptr<std::set<std::string>> completions;
+extern bool pathCompletions;
+
+std::optional<std::string> needsCompletion(std::string_view s);
+
+void completePath(size_t, std::string_view prefix);
+
+void completeDir(size_t, std::string_view prefix);
 
 }

@@ -21,11 +21,11 @@ protected:
         std::ostream & str;
         bool indent;
         size_t depth = 0;
-        std::vector<JSONWriter *> stack;
+        size_t stack = 0;
         JSONState(std::ostream & str, bool indent) : str(str), indent(indent) { }
         ~JSONState()
         {
-            assert(stack.empty());
+            assert(stack == 0);
         }
     };
 
@@ -41,7 +41,7 @@ protected:
 
     void assertActive()
     {
-        assert(!state->stack.empty() && state->stack.back() == this);
+        assert(state->stack != 0);
     }
 
     void comma();
@@ -117,6 +117,14 @@ public:
         open();
     }
 
+    JSONObject(const JSONObject & obj) = delete;
+
+    JSONObject(JSONObject && obj)
+        : JSONWriter(obj.state)
+    {
+        obj.state = 0;
+    }
+
     ~JSONObject();
 
     template<typename T>
@@ -160,10 +168,7 @@ public:
     {
     }
 
-    ~JSONPlaceholder()
-    {
-        assert(!first || std::uncaught_exception());
-    }
+    ~JSONPlaceholder();
 
     template<typename T>
     void write(const T & v)

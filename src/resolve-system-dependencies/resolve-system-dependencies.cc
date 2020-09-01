@@ -32,25 +32,31 @@ std::set<std::string> runResolver(const Path & filename)
 {
     AutoCloseFD fd = open(filename.c_str(), O_RDONLY);
     if (!fd)
-        throw SysError("opening ‘%s’", filename);
+        throw SysError("opening '%s'", filename);
 
     struct stat st;
     if (fstat(fd.get(), &st))
-        throw SysError("statting ‘%s’", filename);
+        throw SysError("statting '%s'", filename);
 
     if (!S_ISREG(st.st_mode)) {
-        printError("file ‘%s’ is not a regular file", filename);
+        logError({
+            .name = "Regular MACH file",
+            .hint = hintfmt("file '%s' is not a regular file", filename)
+        });
         return {};
     }
 
     if (st.st_size < sizeof(mach_header_64)) {
-        printError("file ‘%s’ is too short for a MACH binary", filename);
+        logError({
+            .name = "File too short",
+            .hint = hintfmt("file '%s' is too short for a MACH binary", filename)
+        });
         return {};
     }
 
     char* obj = (char*) mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd.get(), 0);
     if (!obj)
-        throw SysError("mmapping ‘%s’", filename);
+        throw SysError("mmapping '%s'", filename);
 
     ptrdiff_t mach64_offset = 0;
 
@@ -66,13 +72,19 @@ std::set<std::string> runResolver(const Path & filename)
             }
         }
         if (mach64_offset == 0) {
-            printError(format("Could not find any mach64 blobs in file ‘%1%’, continuing...") % filename);
+            logError({
+                .name = "No mach64 blobs",
+                .hint = hintfmt("Could not find any mach64 blobs in file '%1%', continuing...", filename)
+            });
             return {};
         }
     } else if (magic == MH_MAGIC_64 || magic == MH_CIGAM_64) {
         mach64_offset = 0;
     } else {
-        printError(format("Object file has unknown magic number ‘%1%’, skipping it...") % magic);
+        logError({
+            .name = "Magic number",
+            .hint = hintfmt("Object file has unknown magic number '%1%', skipping it...", magic)
+        });
         return {};
     }
 
@@ -101,7 +113,7 @@ bool isSymlink(const Path & path)
 {
     struct stat st;
     if (lstat(path.c_str(), &st) == -1)
-        throw SysError("getting attributes of path ‘%1%’", path);
+        throw SysError("getting attributes of path '%1%'", path);
 
     return S_ISLNK(st.st_mode);
 }
@@ -117,9 +129,7 @@ Path resolveSymlink(const Path & path)
 std::set<string> resolveTree(const Path & path, PathSet & deps)
 {
     std::set<string> results;
-    if (deps.count(path))
-        return {};
-    deps.insert(path);
+    if (!deps.insert(path).second) return {};
     for (auto & lib : runResolver(path)) {
         results.insert(lib);
         for (auto & p : resolveTree(lib, deps)) {
@@ -181,8 +191,8 @@ int main(int argc, char ** argv)
         if (std::string(argv[1]) == "--test")
             impurePaths.insert(argv[2]);
         else {
-            auto drv = store->derivationFromPath(Path(argv[1]));
-            impurePaths = tokenizeString<StringSet>(get(drv.env, "__impureHostDeps"));
+            auto drv = store->derivationFromPath(store->parseStorePath(argv[1]));
+            impurePaths = tokenizeString<StringSet>(get(drv.env, "__impureHostDeps").value_or(""));
             impurePaths.insert("/usr/lib/libSystem.dylib");
         }
 

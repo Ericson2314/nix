@@ -31,32 +31,40 @@ protected:
     bool fileExists(const std::string & path) override;
 
     void upsertFile(const std::string & path,
-        const std::string & data,
-        const std::string & mimeType) override;
-
-    void getFile(const std::string & path,
-        std::function<void(std::shared_ptr<std::string>)> success,
-        std::function<void(std::exception_ptr exc)> failure) override
+        std::shared_ptr<std::basic_iostream<char>> istream,
+        const std::string & mimeType) override
     {
-        sync2async<std::shared_ptr<std::string>>(success, failure, [&]() {
-            try {
-                return std::make_shared<std::string>(readFile(binaryCacheDir + "/" + path));
-            } catch (SysError & e) {
-                if (e.errNo == ENOENT) return std::shared_ptr<std::string>();
-                throw;
-            }
-        });
+        auto path2 = binaryCacheDir + "/" + path;
+        Path tmp = path2 + ".tmp." + std::to_string(getpid());
+        AutoDelete del(tmp, false);
+        StreamToSourceAdapter source(istream);
+        writeFile(tmp, source);
+        if (rename(tmp.c_str(), path2.c_str()))
+            throw SysError("renaming '%1%' to '%2%'", tmp, path2);
+        del.cancel();
     }
 
-    PathSet queryAllValidPaths() override
+    void getFile(const std::string & path, Sink & sink) override
     {
-        PathSet paths;
+        try {
+            readFile(binaryCacheDir + "/" + path, sink);
+        } catch (SysError & e) {
+            if (e.errNo == ENOENT)
+                throw NoSuchBinaryCacheFile("file '%s' does not exist in binary cache", path);
+        }
+    }
+
+    StorePathSet queryAllValidPaths() override
+    {
+        StorePathSet paths;
 
         for (auto & entry : readDirectory(binaryCacheDir)) {
             if (entry.name.size() != 40 ||
                 !hasSuffix(entry.name, ".narinfo"))
                 continue;
-            paths.insert(storeDir + "/" + entry.name.substr(0, entry.name.size() - 8));
+            paths.insert(parseStorePath(
+                    storeDir + "/" + entry.name.substr(0, entry.name.size() - 8)
+                    + "-" + MissingName));
         }
 
         return paths;
@@ -67,29 +75,14 @@ protected:
 void LocalBinaryCacheStore::init()
 {
     createDirs(binaryCacheDir + "/nar");
+    if (writeDebugInfo)
+        createDirs(binaryCacheDir + "/debuginfo");
     BinaryCacheStore::init();
-}
-
-static void atomicWrite(const Path & path, const std::string & s)
-{
-    Path tmp = path + ".tmp." + std::to_string(getpid());
-    AutoDelete del(tmp, false);
-    writeFile(tmp, s);
-    if (rename(tmp.c_str(), path.c_str()))
-        throw SysError(format("renaming ‘%1%’ to ‘%2%’") % tmp % path);
-    del.cancel();
 }
 
 bool LocalBinaryCacheStore::fileExists(const std::string & path)
 {
     return pathExists(binaryCacheDir + "/" + path);
-}
-
-void LocalBinaryCacheStore::upsertFile(const std::string & path,
-    const std::string & data,
-    const std::string & mimeType)
-{
-    atomicWrite(binaryCacheDir + "/" + path, data);
 }
 
 static RegisterStoreImplementation regStore([](

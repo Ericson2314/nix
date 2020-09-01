@@ -31,6 +31,7 @@ template<> void toJSON<unsigned long>(std::ostream & str, const unsigned long & 
 template<> void toJSON<long long>(std::ostream & str, const long long & n) { str << n; }
 template<> void toJSON<unsigned long long>(std::ostream & str, const unsigned long long & n) { str << n; }
 template<> void toJSON<float>(std::ostream & str, const float & n) { str << n; }
+template<> void toJSON<double>(std::ostream & str, const double & n) { str << n; }
 
 template<> void toJSON<std::string>(std::ostream & str, const std::string & s)
 {
@@ -50,20 +51,22 @@ template<> void toJSON<std::nullptr_t>(std::ostream & str, const std::nullptr_t 
 JSONWriter::JSONWriter(std::ostream & str, bool indent)
     : state(new JSONState(str, indent))
 {
-    state->stack.push_back(this);
+    state->stack++;
 }
 
 JSONWriter::JSONWriter(JSONState * state)
     : state(state)
 {
-    state->stack.push_back(this);
+    state->stack++;
 }
 
 JSONWriter::~JSONWriter()
 {
-    assertActive();
-    state->stack.pop_back();
-    if (state->stack.empty()) delete state;
+    if (state) {
+        assertActive();
+        state->stack--;
+        if (state->stack == 0) delete state;
+    }
 }
 
 void JSONWriter::comma()
@@ -121,9 +124,11 @@ void JSONObject::open()
 
 JSONObject::~JSONObject()
 {
-    state->depth--;
-    if (state->indent && !first) indent();
-    state->str << "}";
+    if (state) {
+        state->depth--;
+        if (state->indent && !first) indent();
+        state->str << "}";
+    }
 }
 
 void JSONObject::attr(const std::string & s)
@@ -164,6 +169,11 @@ JSONObject JSONPlaceholder::object()
     assertValid();
     first = false;
     return JSONObject(state);
+}
+
+JSONPlaceholder::~JSONPlaceholder()
+{
+    assert(!first || std::uncaught_exceptions());
 }
 
 }

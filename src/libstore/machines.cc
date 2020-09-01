@@ -1,6 +1,7 @@
 #include "machines.hh"
 #include "util.hh"
 #include "globals.hh"
+#include "store-api.hh"
 
 #include <algorithm>
 
@@ -17,7 +18,11 @@ Machine::Machine(decltype(storeUri) storeUri,
     storeUri(
         // Backwards compatibility: if the URI is a hostname,
         // prepend ssh://.
-        storeUri.find("://") != std::string::npos || hasPrefix(storeUri, "local") || hasPrefix(storeUri, "remote") || hasPrefix(storeUri, "auto")
+        storeUri.find("://") != std::string::npos
+        || hasPrefix(storeUri, "local")
+        || hasPrefix(storeUri, "remote")
+        || hasPrefix(storeUri, "auto")
+        || hasPrefix(storeUri, "/")
         ? storeUri
         : "ssh://" + storeUri),
     systemTypes(systemTypes),
@@ -44,16 +49,52 @@ bool Machine::mandatoryMet(const std::set<string> & features) const {
         });
 }
 
+ref<Store> Machine::openStore() const {
+    Store::Params storeParams;
+    if (hasPrefix(storeUri, "ssh://")) {
+        storeParams["max-connections"] = "1";
+        storeParams["log-fd"] = "4";
+        if (sshKey != "")
+            storeParams["ssh-key"] = sshKey;
+    }
+    {
+        auto & fs = storeParams["system-features"];
+        auto append = [&](auto feats) {
+            for (auto & f : feats) {
+                if (fs.size() > 0) fs += ' ';
+                fs += f;
+            }
+        };
+        append(supportedFeatures);
+        append(mandatoryFeatures);
+    }
+
+    return nix::openStore(storeUri, storeParams);
+}
+
 void parseMachines(const std::string & s, Machines & machines)
 {
     for (auto line : tokenizeString<std::vector<string>>(s, "\n;")) {
-        chomp(line);
+        trim(line);
         line.erase(std::find(line.begin(), line.end(), '#'), line.end());
         if (line.empty()) continue;
+
+        if (line[0] == '@') {
+            auto file = trim(std::string(line, 1));
+            try {
+                parseMachines(readFile(file), machines);
+            } catch (const SysError & e) {
+                if (e.errNo != ENOENT)
+                    throw;
+                debug("cannot find machines file '%s'", file);
+            }
+            continue;
+        }
+
         auto tokens = tokenizeString<std::vector<string>>(line);
         auto sz = tokens.size();
         if (sz < 1)
-            throw FormatError("bad machine specification ‘%s’", line);
+            throw FormatError("bad machine specification '%s'", line);
 
         auto isSet = [&](size_t n) {
             return tokens.size() > n && tokens[n] != "" && tokens[n] != "-";
@@ -72,19 +113,11 @@ void parseMachines(const std::string & s, Machines & machines)
 
 Machines getMachines()
 {
-    Machines machines;
-
-    for (auto & file : settings.builderFiles.get()) {
-        try {
-            parseMachines(readFile(file), machines);
-        } catch (const SysError & e) {
-            if (e.errNo != ENOENT)
-                throw;
-        }
-    }
-
-    parseMachines(settings.builders, machines);
-
+    static auto machines = [&]() {
+        Machines machines;
+        parseMachines(settings.builders, machines);
+        return machines;
+    }();
     return machines;
 }
 

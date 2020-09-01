@@ -43,7 +43,7 @@ use <command>nix-build</command>’s <option
 linkend='opt-out-link'>-o</option> switch to give the symlink another
 name.</para>
 
-<para>Nix has a transactional semantics.  Once a build finishes
+<para>Nix has transactional semantics.  Once a build finishes
 successfully, Nix makes a note of this in its database: it registers
 that the path denoted by <envar>out</envar> is now
 <quote>valid</quote>.  If you try to build the derivation again, Nix
@@ -72,15 +72,5 @@ waiting for lock on `/nix/store/0h5b7hp8d4hqfrw8igvx97x1xawrjnac-hello-2.1.1x'</
 
 So it is always safe to run multiple instances of Nix in parallel
 (which isn’t the case with, say, <command>make</command>).</para>
-
-<para>If you have a system with multiple CPUs, you may want to have
-Nix build different derivations in parallel (insofar as possible).
-Just pass the option <link linkend='opt-max-jobs'><option>-j
-<replaceable>N</replaceable></option></link>, where
-<replaceable>N</replaceable> is the maximum number of jobs to be run
-in parallel, or set.  Typically this should be the number of
-CPUs.</para>
-
-<xi:include href="debug-build.xml" />
 
 </section>

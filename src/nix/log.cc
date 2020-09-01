@@ -2,47 +2,66 @@
 #include "common-args.hh"
 #include "shared.hh"
 #include "store-api.hh"
+#include "progress-bar.hh"
 
 using namespace nix;
 
-struct CmdLog : InstallablesCommand
+struct CmdLog : InstallableCommand
 {
-    CmdLog()
-    {
-    }
-
-    std::string name() override
-    {
-        return "log";
-    }
-
     std::string description() override
     {
-        return "show the build log of the specified packages or paths";
+        return "show the build log of the specified packages or paths, if available";
     }
+
+    Examples examples() override
+    {
+        return {
+            Example{
+                "To get the build log of GNU Hello:",
+                "nix log nixpkgs#hello"
+            },
+            Example{
+                "To get the build log of a specific path:",
+                "nix log /nix/store/lmngj4wcm9rkv3w4dfhzhcyij3195hiq-thunderbird-52.2.1"
+            },
+            Example{
+                "To get a build log from a specific binary cache:",
+                "nix log --store https://cache.nixos.org nixpkgs#hello"
+            },
+        };
+    }
+
+    Category category() override { return catSecondary; }
 
     void run(ref<Store> store) override
     {
+        settings.readOnlyMode = true;
+
         auto subs = getDefaultSubstituters();
 
         subs.push_front(store);
 
-        for (auto & inst : installables) {
-            for (auto & b : inst->toBuildable()) {
-                auto path = b.second.drvPath != "" ? b.second.drvPath : b.first;
-                bool found = false;
-                for (auto & sub : subs) {
-                    auto log = sub->getBuildLog(path);
-                    if (!log) continue;
-                    std::cout << *log;
-                    found = true;
-                    break;
-                }
-                if (!found)
-                    throw Error("build log of path ‘%s’ is not available", path);
-            }
+        auto b = installable->toBuildable();
+
+        RunPager pager;
+        for (auto & sub : subs) {
+            auto log = std::visit(overloaded {
+                [&](BuildableOpaque bo) {
+                    return sub->getBuildLog(bo.path);
+                },
+                [&](BuildableFromDrv bfd) {
+                    return sub->getBuildLog(bfd.drvPath);
+                },
+            }, b);
+            if (!log) continue;
+            stopProgressBar();
+            printInfo("got build log for '%s' from '%s'", installable->what(), sub->getUri());
+            std::cout << *log;
+            return;
         }
+
+        throw Error("build log of '%s' is not available", installable->what());
     }
 };
 
-static RegisterCommand r1(make_ref<CmdLog>());
+static auto r1 = registerCommand<CmdLog>("log");

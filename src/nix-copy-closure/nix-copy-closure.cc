@@ -1,13 +1,12 @@
 #include "shared.hh"
 #include "store-api.hh"
+#include "../nix/legacy.hh"
 
 using namespace nix;
 
-int main(int argc, char ** argv)
+static int _main(int argc, char ** argv)
 {
-    return handleExceptions(argv[0], [&]() {
-        initNix();
-
+    {
         auto gzip = false;
         auto toMode = true;
         auto includeOutputs = false;
@@ -23,7 +22,7 @@ int main(int argc, char ** argv)
                 printVersion("nix-copy-closure");
             else if (*arg == "--gzip" || *arg == "--bzip2" || *arg == "--xz") {
                 if (*arg != "--gzip")
-                    printMsg(lvlError, format("Warning: ‘%1%’ is not implemented, falling back to gzip") % *arg);
+                    printMsg(lvlError, format("Warning: '%1%' is not implemented, falling back to gzip") % *arg);
                 gzip = true;
             } else if (*arg == "--from")
                 toMode = false;
@@ -32,7 +31,7 @@ int main(int argc, char ** argv)
             else if (*arg == "--include-outputs")
                 includeOutputs = true;
             else if (*arg == "--show-progress")
-                printMsg(lvlError, "Warning: ‘--show-progress’ is not implemented");
+                printMsg(lvlError, "Warning: '--show-progress' is not implemented");
             else if (*arg == "--dry-run")
                 dryRun = true;
             else if (*arg == "--use-substitutes" || *arg == "-s")
@@ -44,6 +43,8 @@ int main(int argc, char ** argv)
             return true;
         });
 
+        initPlugins();
+
         if (sshHost.empty())
             throw UsageError("no host name specified");
 
@@ -51,13 +52,17 @@ int main(int argc, char ** argv)
         auto to = toMode ? openStore(remoteUri) : openStore();
         auto from = toMode ? openStore() : openStore(remoteUri);
 
-        PathSet storePaths2;
+        StorePathSet storePaths2;
         for (auto & path : storePaths)
             storePaths2.insert(from->followLinksToStorePath(path));
 
-        PathSet closure;
+        StorePathSet closure;
         from->computeFSClosure(storePaths2, closure, false, includeOutputs);
 
         copyPaths(from, to, closure, NoRepair, NoCheckSigs, useSubstitutes);
-    });
+
+        return 0;
+    }
 }
+
+static RegisterLegacyCommand s1("nix-copy-closure", _main);

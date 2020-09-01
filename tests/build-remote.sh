@@ -1,28 +1,47 @@
-source common.sh
+if ! canUseSandbox; then exit; fi
+if ! [[ $busybox =~ busybox ]]; then exit; fi
 
-clearStore
+unset NIX_STORE_DIR
+unset NIX_STATE_DIR
 
-if [[ $(uname) != Linux ]]; then exit; fi
-if [[ ! $SHELL =~ /nix/store ]]; then exit; fi
+function join_by { local d=$1; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}"; }
 
-chmod -R u+w $TEST_ROOT/store0 || true
-chmod -R u+w $TEST_ROOT/store1 || true
-rm -rf $TEST_ROOT/store0 $TEST_ROOT/store1
+builders=(
+  # system-features will automatically be added to the outer URL, but not inner
+  # remote-store URL.
+  "ssh://localhost?remote-store=$TEST_ROOT/machine1?system-features=foo - - 1 1 foo"
+  "$TEST_ROOT/machine2 - - 1 1 bar"
+  "ssh-ng://localhost?remote-store=$TEST_ROOT/machine3?system-features=baz - - 1 1 baz"
+)
 
-# FIXME: --option is not passed to build-remote, so have to create a config file.
-export NIX_CONF_DIR=$TEST_ROOT/etc2
-mkdir -p $NIX_CONF_DIR
-echo "
-build-sandbox-paths = /nix/store
-sandbox-build-dir = /build-tmp
-" > $NIX_CONF_DIR/nix.conf
+# Note: ssh://localhost bypasses ssh, directly invoking nix-store as a
+# child process. This allows us to test LegacySSHStore::buildDerivation().
+# ssh-ng://... likewise allows us to test RemoteStore::buildDerivation().
+nix build -L -v -f $file -o $TEST_ROOT/result --max-jobs 0 \
+  --arg busybox $busybox \
+  --store $TEST_ROOT/machine0 \
+  --builders "$(join_by '; ' "${builders[@]}")"
 
-outPath=$(nix-build build-hook.nix --no-out-link -j0 \
-  --option builders "local?root=$TEST_ROOT/store0; local?root=$TEST_ROOT/store1 - - 1 1 foo")
+outPath=$(readlink -f $TEST_ROOT/result)
 
-cat $outPath/foobar | grep FOOBAR
+grep 'FOO BAR BAZ' $TEST_ROOT/machine0/$outPath
+
+set -o pipefail
 
 # Ensure that input1 was built on store1 due to the required feature.
-p=$(readlink -f $outPath/input-2)
-(! nix path-info --store local?root=$TEST_ROOT/store0 --all | grep dependencies.builder1.sh)
-nix path-info --store local?root=$TEST_ROOT/store1 --all | grep dependencies.builder1.sh
+nix path-info --store $TEST_ROOT/machine1 --all \
+  | grep builder-build-remote-input-1.sh \
+  | grep -v builder-build-remote-input-2.sh \
+  | grep -v builder-build-remote-input-3.sh
+
+# Ensure that input2 was built on store2 due to the required feature.
+nix path-info --store $TEST_ROOT/machine2 --all \
+  | grep -v builder-build-remote-input-1.sh \
+  | grep builder-build-remote-input-2.sh \
+  | grep -v builder-build-remote-input-3.sh
+
+# Ensure that input3 was built on store3 due to the required feature.
+nix path-info --store $TEST_ROOT/machine3 --all \
+  | grep -v builder-build-remote-input-1.sh \
+  | grep -v builder-build-remote-input-2.sh \
+  | grep builder-build-remote-input-3.sh

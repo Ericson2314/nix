@@ -40,7 +40,12 @@ void printValueAsJSON(EvalState & state, bool strict,
             break;
 
         case tAttrs: {
-            Bindings::iterator i = v.attrs->find(state.sOutPath);
+            auto maybeString = state.tryAttrsToString(noPos, v, context, false, false);
+            if (maybeString) {
+                out.write(*maybeString);
+                break;
+            }
+            auto i = v.attrs->find(state.sOutPath);
             if (i == v.attrs->end()) {
                 auto obj(out.object());
                 StringSet names;
@@ -74,7 +79,7 @@ void printValueAsJSON(EvalState & state, bool strict,
             break;
 
         default:
-            throw TypeError(format("cannot convert %1% to JSON") % showType(v));
+            throw TypeError("cannot convert %1% to JSON", showType(v));
     }
 }
 
@@ -88,7 +93,7 @@ void printValueAsJSON(EvalState & state, bool strict,
 void ExternalValueBase::printValueAsJSON(EvalState & state, bool strict,
     JSONPlaceholder & out, PathSet & context) const
 {
-    throw TypeError(format("cannot convert %1% to JSON") % showType());
+    throw TypeError("cannot convert %1% to JSON", showType());
 }
 
 

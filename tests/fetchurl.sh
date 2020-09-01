@@ -5,7 +5,7 @@ clearStore
 # Test fetching a flat file.
 hash=$(nix-hash --flat --type sha256 ./fetchurl.sh)
 
-outPath=$(nix-build '<nix/fetchurl.nix>' --argstr url file://$(pwd)/fetchurl.sh --argstr sha256 $hash --no-out-link --option hashed-mirrors '')
+outPath=$(nix-build '<nix/fetchurl.nix>' --argstr url file://$(pwd)/fetchurl.sh --argstr sha256 $hash --no-out-link)
 
 cmp $outPath fetchurl.sh
 
@@ -14,22 +14,35 @@ clearStore
 
 hash=$(nix hash-file --type sha512 --base64 ./fetchurl.sh)
 
-outPath=$(nix-build '<nix/fetchurl.nix>' --argstr url file://$(pwd)/fetchurl.sh --argstr sha512 $hash --no-out-link --option hashed-mirrors '')
+outPath=$(nix-build '<nix/fetchurl.nix>' --argstr url file://$(pwd)/fetchurl.sh --argstr sha512 $hash --no-out-link)
 
 cmp $outPath fetchurl.sh
 
-# Test the hashed mirror feature.
+# Now using an SRI hash.
 clearStore
 
-hash=$(nix hash-file --type sha512 --base64 ./fetchurl.sh)
-hash32=$(nix hash-file --type sha512 --base16 ./fetchurl.sh)
+hash=$(nix hash-file ./fetchurl.sh)
 
-mirror=$TMPDIR/hashed-mirror
-rm -rf $mirror
-mkdir -p $mirror/sha512
-ln -s $(pwd)/fetchurl.sh $mirror/sha512/$hash32
+[[ $hash =~ ^sha256- ]]
 
-outPath=$(nix-build '<nix/fetchurl.nix>' --argstr url file:///no-such-dir/fetchurl.sh --argstr sha512 $hash --no-out-link --option hashed-mirrors "file://$mirror")
+outPath=$(nix-build '<nix/fetchurl.nix>' --argstr url file://$(pwd)/fetchurl.sh --argstr hash $hash --no-out-link)
+
+cmp $outPath fetchurl.sh
+
+# Test that we can substitute from a different store dir.
+clearStore
+
+other_store=file://$TEST_ROOT/other_store?store=/fnord/store
+
+hash=$(nix hash-file --type sha256 --base16 ./fetchurl.sh)
+
+storePath=$(nix --store $other_store add-to-store --flat ./fetchurl.sh)
+
+outPath=$(nix-build '<nix/fetchurl.nix>' --argstr url file:///no-such-dir/fetchurl.sh --argstr sha256 $hash --no-out-link --substituters $other_store)
+
+# Test hashed mirrors with an SRI hash.
+nix-build '<nix/fetchurl.nix>' --argstr url file:///no-such-dir/fetchurl.sh --argstr hash $(nix to-sri --type sha256 $hash) \
+          --no-out-link --substituters $other_store
 
 # Test unpacking a NAR.
 rm -rf $TEST_ROOT/archive
