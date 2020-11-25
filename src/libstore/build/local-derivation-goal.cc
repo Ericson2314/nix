@@ -2288,7 +2288,7 @@ void LocalDerivationGoal::registerOutputs()
             continue;
         auto references = *referencesOpt;
 
-        auto rewriteOutput = [&]() {
+        auto rewriteOutput = [&](StringMap rewrites) {
             /* Apply hash rewriting if necessary. */
             if (!outputRewrites.empty()) {
                 warn("rewriting hashes in '%1%'; cross fingers", actualPath);
@@ -2297,7 +2297,7 @@ void LocalDerivationGoal::registerOutputs()
                 StringSink sink;
                 dumpPath(actualPath, sink);
                 deletePath(actualPath);
-                sink.s = make_ref<std::string>(rewriteStrings(*sink.s, outputRewrites));
+                sink.s = make_ref<std::string>(rewriteStrings(*sink.s, rewrites));
                 StringSource source(*sink.s);
                 restorePath(actualPath, source);
             }
@@ -2339,7 +2339,7 @@ void LocalDerivationGoal::registerOutputs()
                         "since recursive hashing is not enabled (outputHashMode=flat)",
                         actualPath);
             }
-            rewriteOutput();
+            rewriteOutput(outputRewrites);
             /* FIXME optimize and deduplicate with addToStore */
             std::string oldHashPart { scratchPath.hashPart() };
             HashModuloSink caSink { outputHash.hashType, oldHashPart };
@@ -2373,19 +2373,15 @@ void LocalDerivationGoal::registerOutputs()
             newInfo0.references = refs.second;
             if (refs.first)
                 newInfo0.references.insert(newInfo0.path);
-            if (scratchPath != newInfo0.path) {
-                // Also rewrite the output path
-                auto source = sinkToSource([&](Sink & nextSink) {
-                    StringSink sink;
-                    dumpPath(actualPath, sink);
-                    RewritingSink rsink2(oldHashPart, std::string(newInfo0.path.hashPart()), nextSink);
-                    rsink2(*sink.s);
-                    rsink2.flush();
-                });
-                Path tmpPath = actualPath + ".tmp";
-                restorePath(tmpPath, *source);
-                deletePath(actualPath);
-                movePath(tmpPath, actualPath);
+            if (refs.first && scratchPath != newInfo0.path) {
+                // If the path has some self-references, we need to rewrite
+                // them.
+                // (note that this doesn't invalidate the ca hash we calculated
+                // above because it's computed *modulo the self-references*, so
+                // it already takes this rewrite into account).
+                rewriteOutput(
+                    StringMap{{std::string(scratchPath.hashPart()),
+                               std::string(newInfo0.path.hashPart())}});
             }
 
             assert(newInfo0.ca);
@@ -2402,7 +2398,7 @@ void LocalDerivationGoal::registerOutputs()
                     outputRewrites.insert_or_assign(
                         std::string { scratchPath.hashPart() },
                         std::string { requiredFinalPath.hashPart() });
-                rewriteOutput();
+                rewriteOutput(outputRewrites);
                 auto narHashAndSize = hashPath(htSHA256, actualPath);
                 ValidPathInfo newInfo0 { requiredFinalPath, narHashAndSize.first };
                 newInfo0.narSize = narHashAndSize.second;
