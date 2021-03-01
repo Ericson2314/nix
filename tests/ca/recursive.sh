@@ -9,5 +9,3 @@ sed -i 's/experimental-features .*/& ca-derivations ca-references nix-command fl
 export NIX_TESTS_CA_BY_DEFAULT=1
 cd ..
 source ./recursive.sh
-
-
