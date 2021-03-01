@@ -1,6 +1,6 @@
 source common.sh
 
-nix build -f multiple-outputs.nix --json a.all b.all --no-link | jq --exit-status '
+nix build -f ../../multiple-outputs.nix --json a.all b.all --no-link | jq --exit-status '
   (.[0] |
     (.drvPath | match(".*multiple-outputs-a.drv")) and
     (.outputs |

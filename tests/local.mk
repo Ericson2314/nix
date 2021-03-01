@@ -44,12 +44,12 @@ nix_tests = \
   recursive.sh \
   describe-stores.sh \
   flakes.sh \
-  build.sh \
   output-normalization.sh \
   compute-levels.sh \
   repl.sh \
+  new-cli/build/ia.sh \
+  new-cli/build/ca-float.sh \
   ca/build.sh \
-  ca/new-build-cmd.sh \
   ca/build-with-garbage-path.sh \
   ca/duplicate-realisation-in-closure.sh \
   ca/substitute.sh \
