@@ -697,6 +697,11 @@ public:
 
     const Stats & getStats();
 
+    /* Computes the full closure of of a set of store-paths for e.g.
+       derivations that need this information for `exportReferencesGraph`.
+     */
+    StorePathSet exportReferences(const StorePathSet & storePaths, const StorePathSet & inputPaths);
+
     /* Return the build log of the specified store path, if available,
        or null otherwise. */
     virtual std::shared_ptr<std::string> getBuildLog(const StorePath & path)
@@ -762,7 +767,7 @@ std::map<StorePath, StorePath> copyPaths(ref<Store> srcStore, ref<Store> dstStor
     CheckSigsFlag checkSigs = CheckSigs,
     SubstituteFlag substitute = NoSubstitute);
 std::map<StorePath, StorePath> copyPaths(ref<Store> srcStore, ref<Store> dstStore,
-    const StorePathSet& paths,
+    const StorePathSet & paths,
     RepairFlag repair = NoRepair,
     CheckSigsFlag checkSigs = CheckSigs,
     SubstituteFlag substitute = NoSubstitute);
