@@ -79,6 +79,7 @@ struct DerivedPath;
 struct DrvOutput;
 struct Realisation;
 struct BuildResult;
+struct PathInfo;
 
 
 namespace worker_proto {
@@ -120,6 +121,13 @@ MAKE_WORKER_PROTO(X_, Y_);
  */
 MAKE_WORKER_PROTO(, std::optional<StorePath>);
 MAKE_WORKER_PROTO(, std::optional<ContentAddress>);
+
+/* These are a non-standard form for historical reasons. */
+
+ValidPathInfo readValidPathInfo(const Store & store, unsigned int version, Source & source);
+ValidPathInfo readValidPathInfo(const Store & store, unsigned int version, Source & source, StorePath && path);
+
+void write(const Store & store, unsigned int version, Sink & sink, const ValidPathInfo & pathInfo, bool includePath = true) ;
 
 }
 

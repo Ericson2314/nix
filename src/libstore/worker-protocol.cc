@@ -6,7 +6,7 @@
 #include "worker-protocol.hh"
 #include "worker-protocol-impl.hh"
 #include "archive.hh"
-#include "derivations.hh"
+#include "path-info.hh"
 
 #include <nlohmann/json.hpp>
 
@@ -46,6 +46,48 @@ void write(const Store & store, unsigned int version, Sink & to, const BuildResu
     worker_proto::write(store, version, to, res.builtOutputs);
 }
 
+
+ValidPathInfo readValidPathInfo(const Store & store, unsigned int version, Source & source)
+{
+    auto path = read(store, version, source, Phantom<StorePath>{});
+    return readValidPathInfo(store, version, source, std::move(path));
+}
+
+ValidPathInfo readValidPathInfo(const Store & store, unsigned int version, Source & source, StorePath && path)
+{
+    auto deriver = readString(source);
+    auto narHash = Hash::parseAny(readString(source), htSHA256);
+    ValidPathInfo info(path, narHash);
+    if (deriver != "") info.deriver = store.parseStorePath(deriver);
+    info.references = read(store, version, source, Phantom<StorePathSet> {});
+    source >> info.registrationTime >> info.narSize;
+    if (GET_PROTOCOL_MINOR(version) >= 16) {
+        source >> info.ultimate;
+        info.sigs = readStrings<StringSet>(source);
+        info.ca = parseContentAddressOpt(readString(source));
+    }
+    return info;
+}
+
+void write(
+    const Store & store,
+    unsigned int version,
+    Sink & sink,
+    const ValidPathInfo & pathInfo,
+    bool includePath)
+{
+    if (includePath)
+        sink << store.printStorePath(pathInfo.path);
+    sink << (pathInfo.deriver ? store.printStorePath(*pathInfo.deriver) : "")
+         << pathInfo.narHash.to_string(Base16, false);
+    write(store, version, sink, pathInfo.references);
+    sink << pathInfo.registrationTime << pathInfo.narSize;
+    if (GET_PROTOCOL_MINOR(version) >= 16) {
+        sink << pathInfo.ultimate
+             << pathInfo.sigs
+             << renderContentAddress(pathInfo.ca);
+    }
+}
 
 }
 }
