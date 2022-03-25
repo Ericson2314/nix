@@ -85,8 +85,8 @@ namespace worker_proto {
 /* FIXME maybe move more stuff inside here */
 
 #define MAKE_WORKER_PROTO(TEMPLATE, T) \
-    TEMPLATE T read(const Store & store, Source & from, Phantom< T > _); \
-    TEMPLATE void write(const Store & store, Sink & out, const T & str)
+    TEMPLATE T read(const Store & store, unsigned int version, Source & from, Phantom< T > _); \
+    TEMPLATE void write(const Store & store, unsigned int version, Sink & out, const T & str)
 
 MAKE_WORKER_PROTO(, std::string);
 MAKE_WORKER_PROTO(, StorePath);

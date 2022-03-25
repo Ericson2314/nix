@@ -658,7 +658,8 @@ Source & readDerivation(Source & in, const Store & store, BasicDerivation & drv,
         drv.outputs.emplace(std::move(name), std::move(output));
     }
 
-    drv.inputSrcs = worker_proto::read(store, in, Phantom<StorePathSet> {});
+    // TODO maybe we will need to use param instead of PROTOCOL_VERSION some day.
+    drv.inputSrcs = worker_proto::read(store, PROTOCOL_VERSION, in, Phantom<StorePathSet> {});
     in >> drv.platform >> drv.builder;
     drv.args = readStrings<Strings>(in);
 
@@ -701,7 +702,8 @@ void writeDerivation(Sink & out, const Store & store, const BasicDerivation & dr
             },
         }, i.second.raw());
     }
-    worker_proto::write(store, out, drv.inputSrcs);
+    // TODO maybe we will need to use param instead of PROTOCOL_VERSION some day.
+    worker_proto::write(store, PROTOCOL_VERSION, out, drv.inputSrcs);
     out << drv.platform << drv.builder << drv.args;
     out << drv.env.size();
     for (auto & i : drv.env)

@@ -138,7 +138,7 @@ struct LegacySSHStore : public virtual LegacySSHStoreConfig, public virtual Stor
             auto deriver = readString(conn->from);
             if (deriver != "")
                 info->deriver = parseStorePath(deriver);
-            info->references = serve_proto::read(*this, conn->from, Phantom<StorePathSet> {});
+            info->references = serve_proto::read(*this, conn->remoteVersion, conn->from, Phantom<StorePathSet> {});
             readLongLong(conn->from); // download size
             info->narSize = readLongLong(conn->from);
 
@@ -172,7 +172,7 @@ struct LegacySSHStore : public virtual LegacySSHStoreConfig, public virtual Stor
                 << printStorePath(info.path)
                 << (info.deriver ? printStorePath(*info.deriver) : "")
                 << info.narHash.to_string(Base16, false);
-            serve_proto::write(*this, conn->to, info.references);
+            serve_proto::write(*this, conn->remoteVersion, conn->to, info.references);
             conn->to
                 << info.registrationTime
                 << info.narSize
@@ -201,7 +201,7 @@ struct LegacySSHStore : public virtual LegacySSHStoreConfig, public virtual Stor
             conn->to
                 << exportMagic
                 << printStorePath(info.path);
-            serve_proto::write(*this, conn->to, info.references);
+            serve_proto::write(*this, conn->remoteVersion, conn->to, info.references);
             conn->to
                 << (info.deriver ? printStorePath(*info.deriver) : "")
                 << 0
@@ -286,7 +286,7 @@ public:
         if (GET_PROTOCOL_MINOR(conn->remoteVersion) >= 3)
             conn->from >> status.timesBuilt >> status.isNonDeterministic >> status.startTime >> status.stopTime;
         if (GET_PROTOCOL_MINOR(conn->remoteVersion) >= 6) {
-            status.builtOutputs = serve_proto::read(*this, conn->from, Phantom<DrvOutputs> {});
+            status.builtOutputs = serve_proto::read(*this, conn->remoteVersion, conn->from, Phantom<DrvOutputs> {});
         }
         return status;
     }
@@ -343,10 +343,10 @@ public:
         conn->to
             << cmdQueryClosure
             << includeOutputs;
-        serve_proto::write(*this, conn->to, paths);
+        serve_proto::write(*this, conn->remoteVersion, conn->to, paths);
         conn->to.flush();
 
-        for (auto & i : serve_proto::read(*this, conn->from, Phantom<StorePathSet> {}))
+        for (auto & i : serve_proto::read(*this, conn->remoteVersion, conn->from, Phantom<StorePathSet> {}))
             out.insert(i);
     }
 
@@ -359,10 +359,10 @@ public:
             << cmdQueryValidPaths
             << false // lock
             << maybeSubstitute;
-        serve_proto::write(*this, conn->to, paths);
+        serve_proto::write(*this, conn->remoteVersion, conn->to, paths);
         conn->to.flush();
 
-        return serve_proto::read(*this, conn->from, Phantom<StorePathSet> {});
+        return serve_proto::read(*this, conn->remoteVersion, conn->from, Phantom<StorePathSet> {});
     }
 
     void connect() override
