@@ -81,7 +81,8 @@ createLinks(State & state, const std::filesystem::path & srcDir, const std::file
                 } else if (S_ISLNK(dstSt.st_mode)) {
                     auto target = canonPath(dstFile, true);
                     if (!S_ISDIR(lstat(target).st_mode))
-                        throw Error("collision between %1% and non-directory %2%", PathFmt(srcFile), PathFmt(target));
+                        throw UnstructuredError(
+                            "collision between %1% and non-directory %2%", PathFmt(srcFile), PathFmt(target));
                     unlink(dstFile);
                     if (mkdir(
                             dstFile.c_str()
@@ -111,7 +112,8 @@ createLinks(State & state, const std::filesystem::path & srcDir, const std::file
                         continue;
                     unlink(dstFile);
                 } else if (S_ISDIR(dstSt.st_mode))
-                    throw Error("collision between non-directory '%1%' and directory '%2%'", srcFile, dstFile);
+                    throw UnstructuredError(
+                        "collision between non-directory '%1%' and directory '%2%'", srcFile, dstFile);
             }
         }
 
@@ -175,7 +177,7 @@ static void builtinBuildenv(const BuiltinBuilderContext & ctx)
     auto getAttr = [&](const std::string & name) {
         auto i = ctx.drv.env.find(name);
         if (i == ctx.drv.env.end())
-            throw Error("attribute '%s' missing", name);
+            throw UnstructuredError("attribute '%s' missing", name);
         return i->second;
     };
 

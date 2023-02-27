@@ -15,7 +15,7 @@ struct PathInputScheme : InputScheme
             return {};
 
         if (url.authority && url.authority->host.size())
-            throw Error("path URL '%s' should not have an authority ('%s')", url, *url.authority);
+            throw UnstructuredError("path URL '%s' should not have an authority ('%s')", url, *url.authority);
 
         Input input{};
         input.attrs.insert_or_assign("type", "path");
@@ -28,9 +28,9 @@ struct PathInputScheme : InputScheme
                 if (auto n = string2Int<uint64_t>(value))
                     input.attrs.insert_or_assign(name, *n);
                 else
-                    throw Error("path URL '%s' has invalid parameter '%s'", url, name);
+                    throw UnstructuredError("path URL '%s' has invalid parameter '%s'", url, name);
             } else
-                throw Error("path URL '%s' has unsupported parameter '%s'", url, name);
+                throw UnstructuredError("path URL '%s' has unsupported parameter '%s'", url, name);
 
         return input;
     }
@@ -135,7 +135,7 @@ struct PathInputScheme : InputScheme
         if (path.is_absolute())
             return canonPath(path);
 
-        throw Error("cannot fetch input '%s' because it uses a relative path", input.to_string());
+        throw UnstructuredError("cannot fetch input '%s' because it uses a relative path", input.to_string());
     }
 
     std::pair<ref<SourceAccessor>, Input>

@@ -15,7 +15,7 @@ NarInfo::NarInfo(const StoreDirConfig & store, const std::string & s, const std:
     unsigned line = 1;
 
     auto corrupt = [&](const char * reason) {
-        return Error(
+        return UnstructuredError(
             "NAR info file '%1%' is corrupt: %2%",
             whence,
             std::string(reason) + (line > 0 ? " at line " + std::to_string(line) : ""));

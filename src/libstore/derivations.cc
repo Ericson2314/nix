@@ -174,10 +174,10 @@ Type type(const Derivation<Inputs, Output> & drv)
         if (!ty)
             ty = newTy;
         else if (ty.value() != newTy)
-            throw Error("can't mix derivation output types");
+            throw UnstructuredError("can't mix derivation output types");
         else if (ty.value() == Type::ContentAddressed{.sandboxed = false, .fixed = true})
             // FIXME: Experimental feature?
-            throw Error("only one fixed output is allowed for now");
+            throw UnstructuredError("only one fixed output is allowed for now");
     };
 
     for (auto & i : drv.outputs) {
@@ -196,7 +196,7 @@ Type type(const Derivation<Inputs, Output> & drv)
                             .fixed = true,
                         });
                     if (i.first != "out"sv)
-                        throw Error("single fixed output must be named \"out\"");
+                        throw UnstructuredError("single fixed output must be named \"out\"");
                 },
                 [&](const Output::CAFloating & dof) {
                     decide(
@@ -207,7 +207,7 @@ Type type(const Derivation<Inputs, Output> & drv)
                     if (!floatingHashAlgo)
                         floatingHashAlgo = dof.hashAlgo;
                     else if (*floatingHashAlgo != dof.hashAlgo)
-                        throw Error("all floating outputs must use the same hash algorithm");
+                        throw UnstructuredError("all floating outputs must use the same hash algorithm");
                 },
                 [&](const Output::Deferred &) {
                     decide(
@@ -221,7 +221,7 @@ Type type(const Derivation<Inputs, Output> & drv)
     }
 
     if (!ty)
-        throw Error("must have at least one output");
+        throw UnstructuredError("must have at least one output");
 
     return ty.value();
 }
@@ -395,7 +395,7 @@ static void processDerivationOutputPaths(
     auto drvType = type(drv);
 
     if (rpcOutputs && std::holds_alternative<Type::InputAddressed>(drvType.raw))
-        throw Error(
+        throw UnstructuredError(
             "derivation uses the '%s' feature, which may only be used with content-addressing derivations",
             drvFeatureBuilderRpcV0);
 
@@ -416,7 +416,7 @@ static void processDerivationOutputPaths(
             }
             auto j = drv.env.find(outputName);
             if (j == drv.env.end())
-                throw Error(
+                throw UnstructuredError(
                     "derivation has missing environment variable '%s', should be '%s' but is not present",
                     outputName,
                     store.printStorePath(actual));
@@ -432,7 +432,7 @@ static void processDerivationOutputPaths(
                     if constexpr (fillIn)
                         j->second = store.printStorePath(actual);
                 } else
-                    throw Error(
+                    throw UnstructuredError(
                         "derivation has incorrect environment variable '%s', should be '%s' but is actually '%s'",
                         outputName,
                         store.printStorePath(actual),
@@ -451,7 +451,7 @@ static void processDerivationOutputPaths(
                     }
                     /* Error case, an explicitly wrong path is
                        always an error. */
-                    throw Error(
+                    throw UnstructuredError(
                         "derivation has incorrect output '%s', should be '%s'",
                         store.printStorePath(outputVariant.path),
                         store.printStorePath(outPath));
@@ -483,7 +483,7 @@ static void processDerivationOutputPaths(
                 if constexpr (std::is_same_v<Out, Output::InputAddressed>) {
                     /* Error case, an explicitly wrong path is
                        always an error. */
-                    throw Error(
+                    throw UnstructuredError(
                         "derivation has incorrect output '%s', should be deferred",
                         store.printStorePath(outputVariant.path));
                 } else if constexpr (std::is_same_v<Out, Output::Deferred>) {
@@ -520,7 +520,7 @@ void checkInvariants(
     drvName = drvName.substr(0, drvName.size() - drvExtension.size());
 
     if (drvName != drv.name) {
-        throw Error(
+        throw UnstructuredError(
             "derivation '%s' has name '%s' which does not match its path", store.printStorePath(drvPath), drv.name);
     }
 

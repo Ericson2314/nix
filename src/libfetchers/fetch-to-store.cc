@@ -90,7 +90,7 @@ std::pair<StorePath, Hash> fetchToStore2(
     } else {
         static auto barf = getEnv("_NIX_TEST_BARF_ON_UNCACHEABLE").value_or("") == "1";
         if (barf && !filter)
-            throw Error("source path '%s' is uncacheable (filter=%d)", path, (bool) filter);
+            throw UnstructuredError("source path '%s' is uncacheable (filter=%d)", path, (bool) filter);
         debug("source path '%s' is uncacheable", path);
     }
 
@@ -124,7 +124,7 @@ std::pair<StorePath, Hash> fetchToStore2(
                   assert(info->references.empty());
                   auto hash = method == ContentAddressMethod::Raw::NixArchive ? info->narHash : ({
                       if (!info->ca || info->ca->method != method)
-                          throw Error("path '%s' lacks a CA field", store.printStorePath(storePath));
+                          throw UnstructuredError("path '%s' lacks a CA field", store.printStorePath(storePath));
                       info->ca->hash;
                   });
                   printMsg(

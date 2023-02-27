@@ -12,7 +12,7 @@
 
 namespace nix {
 
-MakeError(UploadToHTTP, Error);
+MakeError(UploadToHTTP, UnstructuredError);
 
 void UploadToHTTP::anchor() {}
 
@@ -82,7 +82,7 @@ void HttpBinaryCacheStore::init()
         try {
             BinaryCacheStore::init();
         } catch (UploadToHTTP &) {
-            throw Error("'%s' does not appear to be a binary cache", config->cacheUri.to_string());
+            throw UnstructuredError("'%s' does not appear to be a binary cache", config->cacheUri.to_string());
         }
         diskCache->createCache(
             cacheKey, config->storeDir, {.wantMassQuery = config->wantMassQuery, .priority = config->priority});
@@ -120,7 +120,7 @@ StorePaths HttpBinaryCacheStore::topoSortPaths(const StorePathSet & paths)
     return std::visit(
         overloaded{
             [&](const Cycle<StorePath> & cycle) -> StorePaths {
-                throw Error(
+                throw UnstructuredError(
                     "cycle detected in the references of '%s' from '%s'",
                     printStorePath(cycle.path),
                     printStorePath(cycle.parent));

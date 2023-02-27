@@ -61,9 +61,9 @@ static void writeChannels()
 static void addChannel(const std::string & url, const std::string & name)
 {
     if (!regex_search(url, std::regex("^(file|http|https)://")))
-        throw Error("invalid channel URL '%1%'", url);
+        throw UnstructuredError("invalid channel URL '%1%'", url);
     if (!regex_search(name, std::regex("^[a-zA-Z0-9_][a-zA-Z0-9_\\.-]*$")))
-        throw Error("invalid channel identifier '%1%'", name);
+        throw UnstructuredError("invalid channel identifier '%1%'", name);
     readChannels();
     channels[name] = url;
     writeChannels();

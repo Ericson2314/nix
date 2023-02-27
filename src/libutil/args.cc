@@ -154,7 +154,7 @@ struct ParseUnquoted : public Parser
                 state = std::make_shared<ParseQuoted>(ParseQuoted(remaining.substr(2)));
                 return;
             } else
-                throw Error("single backtick is not a supported syntax in the nix shebang.");
+                throw UnstructuredError("single backtick is not a supported syntax in the nix shebang.");
 
         // reserved characters
         // meaning to be determined, or may be reserved indefinitely so that
@@ -175,13 +175,14 @@ struct ParseUnquoted : public Parser
         case '\'':
         case '"':
         case '\\':
-            throw Error(
+            throw UnstructuredError(
                 "unsupported unquoted character in nix shebang: " + std::string(1, remaining[0])
                 + ". Use double backticks to escape?");
 
         case '#':
             if (acc.empty()) {
-                throw Error("unquoted nix shebang argument cannot start with #. Use double backticks to escape?");
+                throw UnstructuredError(
+                    "unquoted nix shebang argument cannot start with #. Use double backticks to escape?");
             } else {
                 acc += remaining[0];
                 remaining = remaining.substr(1);
@@ -200,7 +201,7 @@ struct ParseUnquoted : public Parser
 void ParseQuoted::operator()(std::shared_ptr<Parser> & state, Strings & r)
 {
     if (remaining.empty()) {
-        throw Error("unterminated quoted string in nix shebang");
+        throw UnstructuredError("unterminated quoted string in nix shebang");
     }
     switch (remaining[0]) {
     case ' ':

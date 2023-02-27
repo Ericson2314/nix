@@ -18,7 +18,7 @@ CompressionAlgo parseCompressionAlgo(std::string_view method, bool suggestions)
     if (auto it = lookupTable.find(method); it != lookupTable.end())
         return it->second;
 
-    ErrorInfo err = {.level = lvlError, .msg = HintFmt("unknown compression method '%s'", method)};
+    ErrorInfo err = {.level = lvlError};
 
     if (suggestions) {
         static const StringSet allNames = [&]() {
@@ -30,7 +30,7 @@ CompressionAlgo parseCompressionAlgo(std::string_view method, bool suggestions)
         err.suggestions = Suggestions::bestMatches(allNames, method);
     }
 
-    throw UnknownCompressionMethod(std::move(err));
+    throw UnknownCompressionMethod(std::move(err), HintFmt("unknown compression method '%s'", method));
 }
 
 std::string showCompressionAlgo(CompressionAlgo method)

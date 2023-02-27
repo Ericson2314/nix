@@ -22,7 +22,8 @@ PathInfoJsonFormat parsePathInfoJsonFormat(uint64_t version)
     case 3:
         return PathInfoJsonFormat::V3;
     default:
-        throw Error("unsupported path info JSON format version %d; supported versions are 1, 2 and 3", version);
+        throw UnstructuredError(
+            "unsupported path info JSON format version %d; supported versions are 1, 2 and 3", version);
     }
 }
 
@@ -49,7 +50,7 @@ GENERATE_CMP_EXT(
 std::string ValidPathInfo::fingerprint(const StoreDirConfig & store) const
 {
     if (narSize == 0)
-        throw Error(
+        throw UnstructuredError(
             "cannot calculate fingerprint of path '%s' because its size is not known", store.printStorePath(path));
     return "1;" + store.printStorePath(path) + ";" + narHash.to_string(HashFormat::Nix32, true) + ";"
            + std::to_string(narSize) + ";" + concatStringsSep(",", store.printStorePathSet(references));
@@ -247,7 +248,7 @@ UnkeyedValidPathInfo UnkeyedValidPathInfo::fromJSON(const StoreDirConfig * store
             else if (format == PathInfoJsonFormat::V1)
                 return store->storeDir;
             else
-                throw Error("'storeDir' field is required in path info JSON format version 2");
+                throw UnstructuredError("'storeDir' field is required in path info JSON format version 2");
         }(),
         [&] {
             return format == PathInfoJsonFormat::V1 ? Hash::parseSRI(getString(valueAt(json, "narHash")))

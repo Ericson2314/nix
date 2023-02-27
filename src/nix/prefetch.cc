@@ -30,7 +30,7 @@ std::string resolveMirrorUrl(EvalState & state, const std::string & url)
     std::string s(url, 9);
     auto p = s.find('/');
     if (p == std::string::npos)
-        throw Error("invalid mirror URL '%s'", url);
+        throw UnstructuredError("invalid mirror URL '%s'", url);
     std::string mirrorName(s, 0, p);
 
     Value vMirrors;
@@ -43,11 +43,11 @@ std::string resolveMirrorUrl(EvalState & state, const std::string & url)
 
     auto mirrorList = vMirrors.attrs()->get(state.symbols.create(mirrorName));
     if (!mirrorList)
-        throw Error("unknown mirror name '%s'", mirrorName);
+        throw UnstructuredError("unknown mirror name '%s'", mirrorName);
     state.forceList(*mirrorList->value, noPos, "while evaluating one mirror configuration");
 
     if (mirrorList->value->listSize() < 1)
-        throw Error("mirror URL '%s' did not expand to anything", url);
+        throw UnstructuredError("mirror URL '%s' did not expand to anything", url);
 
     std::string mirror(
         state.forceString(*mirrorList->value->listView()[0], noPos, "while evaluating the first available mirror"));
@@ -71,7 +71,7 @@ std::tuple<StorePath, Hash> prefetchFile(
                                /* Figure out a name in the Nix store. */
                                auto derivedFromUrl = url.lastPathSegment();
                                if (!derivedFromUrl || derivedFromUrl->empty())
-                                   throw Error("cannot figure out file name for '%s'", url.to_string());
+                                   throw UnstructuredError("cannot figure out file name for '%s'", url.to_string());
                                return derivedFromUrl;
                            })
                            .value();
@@ -130,7 +130,7 @@ std::tuple<StorePath, Hash> prefetchFile(
 
             auto entries = DirectoryIterator{unpacked};
             if (entries == DirectoryIterator{})
-                throw Error("archive '%s' is empty", url.to_string());
+                throw UnstructuredError("archive '%s' is empty", url.to_string());
             /* If the archive unpacks to a single file/directory, then use
                that as the top-level. */
             tmpFile = entries->path();
@@ -223,10 +223,10 @@ static int main_nix_prefetch_url(int argc, char ** argv)
             /* Extract the URL. */
             auto * attr = v.attrs()->get(state->symbols.create("urls"));
             if (!attr)
-                throw Error("attribute 'urls' missing");
+                throw UnstructuredError("attribute 'urls' missing");
             state->forceList(*attr->value, noPos, "while evaluating the urls to prefetch");
             if (attr->value->listSize() < 1)
-                throw Error("'urls' list is empty");
+                throw UnstructuredError("'urls' list is empty");
             url = state->forceString(
                 *attr->value->listView()[0], noPos, "while evaluating the first url from the urls list");
 

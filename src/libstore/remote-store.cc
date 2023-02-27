@@ -74,7 +74,8 @@ ref<RemoteStore::Connection> RemoteStore::openConnectionWrapper()
         /* Throw Interrupted instead of the following error to silence pesky
            warning messages that ThreadPool prints on shutdown if other threads
            failed. */
-        throw Error("opening a connection to remote store '%s' previously failed", config.getHumanReadableURI());
+        throw UnstructuredError(
+            "opening a connection to remote store '%s' previously failed", config.getHumanReadableURI());
     }
     try {
         return openConnection();
@@ -103,7 +104,7 @@ void RemoteStore::initConnection(Connection & conn)
 
             conn.protoVersion = WorkerProto::BasicClientConnection::handshake(conn.to, tee, localVersion);
             if (conn.protoVersion.number < WorkerProto::minimum.number)
-                throw Error("the Nix daemon version is too old");
+                throw UnstructuredError("the Nix daemon version is too old");
         } catch (SerialisationError & e) {
             /* In case the other side is waiting for our input, close
                it. */
@@ -112,7 +113,7 @@ void RemoteStore::initConnection(Connection & conn)
                 NullSink nullSink;
                 tee.drainInto(nullSink);
             }
-            throw Error("protocol mismatch, got '%s'", chomp(saved.s));
+            throw UnstructuredError("protocol mismatch, got '%s'", chomp(saved.s));
         }
 
         static_cast<WorkerProto::ClientHandshakeInfo &>(conn) = conn.postHandshake(*this);
@@ -124,7 +125,8 @@ void RemoteStore::initConnection(Connection & conn)
         if (ex)
             std::rethrow_exception(ex);
     } catch (Error & e) {
-        throw Error("cannot open connection to remote store '%s': %s", config.getHumanReadableURI(), e.what());
+        throw UnstructuredError(
+            "cannot open connection to remote store '%s': %s", config.getHumanReadableURI(), e.what());
     }
 
     if (!conn.protoVersion.features.contains(WorkerProto::featureDisableSetOptions))
@@ -362,7 +364,7 @@ ref<const ValidPathInfo> RemoteStore::addCAToStore(
         return make_ref<ValidPathInfo>(WorkerProto::Serialise<ValidPathInfo>::read(*this, *conn));
     } else {
         if (repair)
-            throw Error("repairing is not supported when building through the Nix daemon protocol < 1.25");
+            throw UnstructuredError("repairing is not supported when building through the Nix daemon protocol < 1.25");
 
         switch (caMethod.raw) {
         case ContentAddressMethod::Raw::Text: {
@@ -514,7 +516,7 @@ void RemoteStore::submitOutput(const SingleDerivedPath & path, const OutputName 
 {
     auto conn(getConnection());
     if (!conn->protoVersion.features.contains(WorkerProto::featureSubmitOutput))
-        throw Error(
+        throw UnstructuredError(
             "the daemon does not support SubmitOutput, perhaps this is not in a derivation with the `builder-rpc-v0` feature?");
 
     conn->to << WorkerProto::Op::SubmitOutput;
@@ -536,7 +538,8 @@ ref<const ValidPathInfo> RemoteStore::addToStoreScanning(
 
     auto conn(getConnection());
     if (!conn->protoVersion.features.contains(WorkerProto::featureAddToStoreScanning))
-        throw Error("the daemon does not support AddToStoreScanning, perhaps this is not in a recursive-nix builder?");
+        throw UnstructuredError(
+            "the daemon does not support AddToStoreScanning, perhaps this is not in a recursive-nix builder?");
 
     conn->to << WorkerProto::Op::AddToStoreScanning << name << hashMethod.renderWithAlgo(hashAlgo);
 
@@ -786,10 +789,10 @@ void RemoteStore::collectGarbage(const GCOptions & options, GCResults & results)
             overloaded{
                 [&](const GCOptions::SpecificPaths & paths) {
                     if (options.action != GCOptions::gcDeleteSpecific)
-                        throw Error(
+                        throw UnstructuredError(
                             "Your daemon version is too old to support garbage collecting a specific set of paths");
                     if (paths.deleteReferrers)
-                        throw Error("Your daemon version is too old to support deleting referrers.");
+                        throw UnstructuredError("Your daemon version is too old to support deleting referrers.");
                     return paths.paths;
                 },
                 [](const GCOptions::WholeStore & _) { return StorePathSet{}; },

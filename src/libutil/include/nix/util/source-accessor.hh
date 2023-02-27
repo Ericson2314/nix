@@ -31,7 +31,7 @@ enum class SymlinkResolution {
     Full,
 };
 
-MakeError(SourceAccessorError, Error);
+MakeError(SourceAccessorError, UnstructuredError);
 MakeError(FileNotFound, SourceAccessorError);
 MakeError(NotASymlink, SourceAccessorError);
 MakeError(NotADirectory, SourceAccessorError);
@@ -259,9 +259,9 @@ ref<SourceAccessor> makeEmptySourceAccessor();
  * Exception thrown when accessing a filtered path (see
  * `FilteringSourceAccessor`).
  */
-MakeError(RestrictedPathError, Error);
+MakeError(RestrictedPathError, UnstructuredError);
 
-class SymlinkNotAllowed final : public CloneableError<SymlinkNotAllowed, Error>
+class SymlinkNotAllowed final : public CloneableError<SymlinkNotAllowed, UnstructuredError>
 {
     void anchor() override;
 

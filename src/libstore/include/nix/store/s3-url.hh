@@ -25,7 +25,7 @@ enum class S3AddressingStyle {
     Virtual,
 };
 
-MakeError(InvalidS3AddressingStyle, Error);
+MakeError(InvalidS3AddressingStyle, UnstructuredError);
 
 S3AddressingStyle parseS3AddressingStyle(std::string_view style);
 std::string_view showS3AddressingStyle(S3AddressingStyle style);

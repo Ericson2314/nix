@@ -116,7 +116,7 @@ ChrootDerivationBuilder::addDependencyPrep(const StorePath & path)
     if (pathExists(target)) {
         // There is a similar debug message in doBind, so only run it in this block to not have double messages.
         debug("bind-mounting %s -> %s", PathFmt(target), PathFmt(source));
-        throw Error("store path '%s' already exists in the sandbox", store->printStorePath(path));
+        throw UnstructuredError("store path '%s' already exists in the sandbox", store->printStorePath(path));
     }
 
     return {source, targetRelPath};

@@ -29,13 +29,15 @@ PackageInfo::PackageInfo(EvalState & state, ref<Store> store, const std::string 
     name = drvPath.name();
 
     if (selectedOutputs.size() > 1)
-        throw Error("building more than one derivation output is not supported, in '%s'", drvPathWithOutputs);
+        throw UnstructuredError(
+            "building more than one derivation output is not supported, in '%s'", drvPathWithOutputs);
 
     outputName = selectedOutputs.empty() ? getOr(drv.env, "outputName", "out") : *selectedOutputs.begin();
 
     auto i = drv.outputs.find(outputName);
     if (i == drv.outputs.end())
-        throw Error("derivation '%s' does not have output '%s'", store->printStorePath(drvPath), outputName);
+        throw UnstructuredError(
+            "derivation '%s' does not have output '%s'", store->printStorePath(drvPath), outputName);
     auto & [outputName, output] = *i;
 
     outPath = {output.path(*store, drv.name, outputName)};
@@ -87,7 +89,7 @@ StorePath PackageInfo::requireDrvPath() const
 {
     if (auto drvPath = queryDrvPath())
         return *drvPath;
-    throw Error("derivation does not contain a 'drvPath' attribute");
+    throw UnstructuredError("derivation does not contain a 'drvPath' attribute");
 }
 
 StorePath PackageInfo::queryOutPath() const
@@ -100,7 +102,7 @@ StorePath PackageInfo::queryOutPath() const
                 i->pos, *i->value, context, "while evaluating the output path of a derivation");
     }
     if (!outPath)
-        throw Error("derivation does not have attribute 'outPath'");
+        throw UnstructuredError("derivation does not have attribute 'outPath'");
     return *outPath;
 }
 
@@ -149,7 +151,7 @@ PackageInfo::Outputs PackageInfo::queryOutputs(bool withPaths, bool onlyOutputsT
         Outputs result;
         auto out = outputs.find(queryOutputName());
         if (out == outputs.end())
-            throw Error("derivation does not have output '%s'", queryOutputName());
+            throw UnstructuredError("derivation does not have output '%s'", queryOutputName());
         result.insert(*out);
         return result;
     }
@@ -159,7 +161,7 @@ PackageInfo::Outputs PackageInfo::queryOutputs(bool withPaths, bool onlyOutputsT
         const Value * outTI = queryMeta("outputsToInstall");
         if (!outTI)
             return outputs;
-        auto errMsg = Error("this derivation has bad 'meta.outputsToInstall'");
+        auto errMsg = UnstructuredError("this derivation has bad 'meta.outputsToInstall'");
         /* ^ this shows during `nix-env -i` right under the bad derivation */
         if (!outTI->isList())
             throw std::move(errMsg);

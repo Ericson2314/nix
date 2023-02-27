@@ -11,14 +11,14 @@ static std::filesystem::path checkBinaryCachePath(const std::filesystem::path & 
 {
     auto p = std::filesystem::path(requireCString(path));
     if (p.empty())
-        throw Error("local binary cache path must not be empty");
+        throw UnstructuredError("local binary cache path must not be empty");
 
     if (p.is_absolute())
-        throw Error("local binary cache path '%s' must not be absolute", path);
+        throw UnstructuredError("local binary cache path '%s' must not be absolute", path);
 
     for (const auto & segment : p) {
         if (segment.native() == OS_STR("..") || segment.native() == OS_STR("."))
-            throw Error("local binary cache path '%s' must not contain '..' or '.' segments", path);
+            throw UnstructuredError("local binary cache path '%s' must not contain '..' or '.' segments", path);
     }
 
     return root / p.relative_path();

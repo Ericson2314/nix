@@ -46,7 +46,7 @@ try {
         *match = 1;
         auto * res = strdup(possible.begin()->c_str() + strlen(s));
         if (!res)
-            throw Error("allocation failure");
+            throw UnstructuredError("allocation failure");
         return res;
     } else if (possible.size() > 1) {
         auto checkAllHaveSameAt = [&](size_t pos) {
@@ -65,7 +65,7 @@ try {
             *match = 1;
             auto * res = strdup(std::string(*possible.begin(), start, len).c_str());
             if (!res)
-                throw Error("allocation failure");
+                throw UnstructuredError("allocation failure");
             return res;
         }
     }
@@ -81,7 +81,7 @@ try {
     auto possible = curRepl->completePrefix(s);
 
     if (possible.size() > (std::numeric_limits<int>::max() / sizeof(char *)))
-        throw Error("too many completions");
+        throw UnstructuredError("too many completions");
 
     int ac = 0;
     char ** vp = nullptr;
@@ -93,7 +93,7 @@ try {
                     free(vp[ac]);
                 free(vp);
             }
-            throw Error("allocation failure");
+            throw UnstructuredError("allocation failure");
         }
         return p;
     };
@@ -119,7 +119,7 @@ ReadlineLikeInteracter::Guard ReadlineLikeInteracter::init(detail::ReplCompleter
     try {
         createDirs(historyFile.parent_path());
     } catch (SystemError & e) {
-        logWarning(e.info());
+        logExWarning(e);
     }
 #if !USE_READLINE
     /* editline's read_history uses a fixed 256-byte buffer (SCREEN_INC),
@@ -140,7 +140,7 @@ ReadlineLikeInteracter::Guard ReadlineLikeInteracter::init(detail::ReplCompleter
     if (!fd) {
         NativeSysError err("opening file %s", PathFmt(historyFile));
         if (!err.is(std::errc::no_such_file_or_directory) && !err.is(std::errc::not_a_directory))
-            logWarning(err.info());
+            logExWarning(err);
     } else {
         try {
             FdSource source(fd.get());
@@ -148,7 +148,7 @@ ReadlineLikeInteracter::Guard ReadlineLikeInteracter::init(detail::ReplCompleter
                 add_history(source.readLine().c_str());
         } catch (EndOfFile &) {
         } catch (SystemError & e) {
-            logWarning(e.info());
+            logExWarning(e);
         }
     }
 #else

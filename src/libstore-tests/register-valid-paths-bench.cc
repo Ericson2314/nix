@@ -28,7 +28,7 @@ static void BM_RegisterValidPathsDerivations(benchmark::State & state)
         std::shared_ptr<Store> store = openStore(fmt("local?root=%s", tmpRoot.string()));
         auto localStore = std::dynamic_pointer_cast<LocalStore>(store);
         if (!localStore)
-            throw Error("expected local store");
+            throw UnstructuredError("expected local store");
 
         ValidPathInfos infos;
         for (int i = 0; i < derivationCount; ++i) {

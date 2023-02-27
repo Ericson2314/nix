@@ -126,10 +126,10 @@ public:
         writeToStderr(prefix + filterANSIEscapes(s, !tty) + "\n");
     }
 
-    void logEI(const ErrorInfo & ei) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
     {
         std::ostringstream oss;
-        showErrorInfo(oss, ei, loggerSettings.showTrace.get());
+        showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
 
         log(ei.level, oss.view());
     }
@@ -289,16 +289,16 @@ struct JSONLogger : Logger
         write(json);
     }
 
-    void logEI(const ErrorInfo & ei) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
     {
         std::ostringstream oss;
-        showErrorInfo(oss, ei, loggerSettings.showTrace.get());
+        showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
 
         nlohmann::json json;
         json["action"] = "msg";
         json["level"] = ei.level;
         json["msg"] = oss.str();
-        json["raw_msg"] = ei.msg.str();
+        json["raw_msg"] = msg.str();
         to_json(json, ei.pos);
 
         if (loggerSettings.showTrace.get() && !ei.traces.empty()) {
@@ -416,7 +416,7 @@ static auto getFields(const nlohmann::json::array_t & json)
         else if (f.type() == nlohmann::json::value_t::string)
             fields.emplace_back(Logger::Field(getString(f)));
         else
-            throw Error("unsupported JSON type %d", (int) f.type());
+            throw UnstructuredError("unsupported JSON type %d", (int) f.type());
     }
     return fields;
 }
@@ -455,7 +455,7 @@ try {
     if (action == "start"sv) {
         auto rawType = getUnsigned(valueAt(json, "type"sv));
         if (rawType != actUnknown && (rawType < actCopyPath || rawType > actLast))
-            throw Error("unknown activity type %d", rawType);
+            throw UnstructuredError("unknown activity type %d", rawType);
         auto type = static_cast<ActivityType>(rawType);
         if (trusted || type == actFileTransfer) {
             auto level = verbosityFromIntClamped(getUnsigned(valueAt(json, "level"sv)));
@@ -479,7 +479,7 @@ try {
         auto i = activities.find(id);
         auto rawType = getUnsigned(valueAt(json, "type"sv));
         if (rawType < resFileLinked || rawType > resLast)
-            throw Error("unknown result type %d", rawType);
+            throw UnstructuredError("unknown result type %d", rawType);
         auto maybeFieldsValue = optionalValueAt(json, "fields"sv);
         /* Back-compat, lack of "fields" member would silently translate into an empty
            array of fields. */

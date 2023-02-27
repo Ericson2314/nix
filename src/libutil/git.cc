@@ -41,7 +41,7 @@ uint64_t parseBlob(Source & source, const ExperimentalFeatureSettings & xpSettin
     auto sizeStr = getStringUntil(source, 0);
     auto size = string2Int<uint64_t>(sizeStr);
     if (!size)
-        throw Error("invalid blob size '%s'", sizeStr);
+        throw UnstructuredError("invalid blob size '%s'", sizeStr);
     return *size;
 }
 
@@ -56,7 +56,7 @@ void parseTree(
     auto sizeStr = getStringUntil(source, 0);
     auto leftOpt = string2Int<uint64_t>(sizeStr);
     if (!leftOpt)
-        throw Error("invalid tree size '%s'", sizeStr);
+        throw UnstructuredError("invalid tree size '%s'", sizeStr);
     auto left = *leftOpt;
 
     while (left) {
@@ -68,10 +68,10 @@ void parseTree(
         RawMode rawMode;
         auto [ptr, ec] = std::from_chars(perms.data(), perms.data() + perms.size(), rawMode, 8);
         if (ec != std::errc{})
-            throw Error("invalid Git permission: %s", perms);
+            throw UnstructuredError("invalid Git permission: %s", perms);
         auto modeOpt = decodeMode(rawMode);
         if (!modeOpt)
-            throw Error("unknown Git permission: %o", rawMode);
+            throw UnstructuredError("unknown Git permission: %o", rawMode);
         auto mode = std::move(*modeOpt);
 
         std::string name = getStringUntil(source, '\0');
@@ -83,7 +83,7 @@ void parseTree(
         left -= hashSize;
 
         if (!(hashAlgo == HashAlgorithm::SHA1 || hashAlgo == HashAlgorithm::SHA256)) {
-            throw Error("Unsupported hash algorithm for git trees: %s", printHashAlgo(hashAlgo));
+            throw UnstructuredError("Unsupported hash algorithm for git trees: %s", printHashAlgo(hashAlgo));
         }
 
         Hash hash(hashAlgo);
@@ -104,7 +104,7 @@ ObjectType parseObjectType(Source & source, const ExperimentalFeatureSettings & 
     } else if (type == "tree ") {
         return ObjectType::Tree;
     } else
-        throw Error("input doesn't look like a Git object");
+        throw UnstructuredError("input doesn't look like a Git object");
 }
 
 std::optional<Mode> convertMode(SourceAccessor::Type type)
@@ -208,7 +208,7 @@ Mode dump(
     case SourceAccessor::tFifo:
     case SourceAccessor::tUnknown:
     default:
-        throw Error("file '%1%' has an unsupported type of %2%", path, st.typeString());
+        throw UnstructuredError("file '%1%' has an unsupported type of %2%", path, st.typeString());
     }
 }
 

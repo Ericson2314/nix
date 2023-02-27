@@ -62,7 +62,7 @@ void copyRecursive(SourceAccessor & accessor, const CanonPath & from, FileSystem
     case SourceAccessor::tFifo:
     case SourceAccessor::tUnknown:
     default:
-        throw Error("file '%1%' has an unsupported type of %2%", from, stat.typeString());
+        throw UnstructuredError("file '%1%' has an unsupported type of %2%", from, stat.typeString());
     }
 }
 
@@ -121,12 +121,12 @@ getParentFdAndName(Descriptor dirFd, const std::filesystem::path & dstPath, cons
        directory first. */
     auto p = append(dstPath, path);
     if (!path.isRoot())
-        throw Error("cannot create non-root path %s without a root directory", PathFmt(p));
+        throw UnstructuredError("cannot create non-root path %s without a root directory", PathFmt(p));
     if (p.empty())
-        throw Error("restore destination path is empty");
+        throw UnstructuredError("restore destination path is empty");
     auto filename = p.filename();
     if (filename == "." || filename == "..")
-        throw Error(
+        throw UnstructuredError(
             "restore destination '%s' ends in '%s', which is not a valid filename", p.native(), filename.native());
     auto parentPath = p.parent_path();
     /* Relative path with no directory component (e.g. "out") —
@@ -186,7 +186,7 @@ void RestoreSink::createDirectory(const CanonPath & path)
 #ifndef _WIN32
     if (dirFd && path.isRoot())
         /* Trying to create a directory that we already have a file descriptor for. */
-        throw Error("path %s already exists", PathFmt(append(dstPath, path)));
+        throw UnstructuredError("path %s already exists", PathFmt(append(dstPath, path)));
 
     auto [_parentFd, fd, name] = getParentFdAndName(dirFd.get(), dstPath, path);
 
@@ -203,7 +203,7 @@ void RestoreSink::createDirectory(const CanonPath & path)
 #else
     auto p = append(dstPath, path);
     if (!std::filesystem::create_directory(p))
-        throw Error("path '%s' already exists", p.string());
+        throw UnstructuredError("path '%s' already exists", p.string());
 #endif
 };
 
@@ -301,7 +301,7 @@ void RestoreRegularFile::preallocateContents(uint64_t len)
 #if HAVE_POSIX_FALLOCATE
     if (len) {
         if (len > std::numeric_limits<off_t>::max())
-            throw Error("cannot preallocate contents for a file because it's too large");
+            throw UnstructuredError("cannot preallocate contents for a file because it's too large");
 
         errno = posix_fallocate(fd.get(), 0, len);
         /* Note that EINVAL may indicate that the underlying

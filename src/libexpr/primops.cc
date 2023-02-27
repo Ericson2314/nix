@@ -970,16 +970,16 @@ static RegisterPrimOp primop_break(
     )",
      .impl = [](EvalState & state, CallSite callSite, Value * const * args, Value & v) {
          if (state.canDebug()) {
-             auto error = Error(
+             auto error = UnstructuredError(
                  ErrorInfo{
                      .level = lvlInfo,
-                     .msg = HintFmt("breakpoint reached"),
                      // A non-null but empty pos, so that the debugger doesn't fall back to
                      // the call site (see EvalState::runDebugRepl). The call site is already
                      // shown by the enclosing "while calling a function" trace, so repeating
                      // it on the breakpoint frame would just be noise.
                      .pos = state.positions[noPos],
-                 });
+                 },
+                 HintFmt("breakpoint reached"));
 
              state.runDebugRepl(&error);
          }
@@ -1356,12 +1356,11 @@ static void prim_warn(EvalState & state, CallSite callSite, Value * const * args
     {
         ErrorInfo info{
             .level = lvlWarn,
-            .msg = HintFmt(std::string(msgStr)),
             .isFromExpr = true,
             // Do not indent relative to the "evaluation warning: " prefix if the message starts with a newline.
             .noIndent = msgStr.starts_with("\n"),
         };
-        logWarning(info);
+        logWarning(info, HintFmt(std::string(msgStr)));
     }
 
     if (state.settings.builtinsAbortOnWarn) {
@@ -1557,11 +1556,10 @@ static void derivationStrictInternal(EvalState & state, std::string_view drvName
         auto warnAttr = [&](HintFmt msg) {
             ErrorInfo info{
                 .level = lvlWarn,
-                .msg = std::move(msg),
                 .pos = state.positions[i->pos],
             };
             info.traces.push_back(Trace{.hint = HintFmt{"while evaluating derivation '%1%'", drvName}});
-            logWarning(info);
+            logWarning(info, msg);
         };
 
         auto handleHashMode = [&](const std::string_view s) {

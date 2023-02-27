@@ -518,7 +518,7 @@ void EvalState::addConstant(const std::string & name, Value * v, Constant info)
 void PrimOp::check()
 {
     if (arity > maxPrimOpArity) {
-        throw Error("primop arity must not exceed %1%", maxPrimOpArity);
+        throw UnstructuredError("primop arity must not exceed %1%", maxPrimOpArity);
     }
 }
 
@@ -833,7 +833,7 @@ void EvalState::runDebugRepl(const Error * error, const Env & env, const Expr & 
                 }(),
                 .expr = expr,
                 .env = env,
-                .hint = error->info().msg,
+                .hint = error->renderMessage(),
                 .isError = true};
 
             return std::make_unique<DebugTraceStacker>(*this, std::move(trace));
@@ -858,7 +858,7 @@ void EvalState::runDebugRepl(const Error * error, const Env & env, const Expr & 
         switch (exitStatus) {
         case ReplExitStatus::QuitAll:
             if (error)
-                throw *error;
+                error->throwClone();
             throw Exit(0);
         case ReplExitStatus::Continue:
             break;
@@ -1043,7 +1043,7 @@ std::string EvalState::mkSingleDerivedPathStringRaw(const SingleDerivedPath & p)
                             auto drv = store->readDerivation(o.path);
                             auto i = drv.outputs.find(b.output);
                             if (i == drv.outputs.end())
-                                throw Error(
+                                throw UnstructuredError(
                                     "derivation '%s' does not have output '%s'",
                                     b.drvPath->to_string(*store),
                                     b.output);
@@ -3222,7 +3222,7 @@ SourcePath resolveExprPath(SourcePath path, bool addDefaultNix)
     while (!path.path.isRoot()) {
         // Basic cycle/depth limit to avoid infinite loops.
         if (++followCount >= maxFollow)
-            throw Error("too many symbolic links encountered while traversing the path '%s'", path);
+            throw UnstructuredError("too many symbolic links encountered while traversing the path '%s'", path);
         auto p = path.parent().resolveSymlinks() / path.baseName();
         if (p.lstat().type != SourceAccessor::tSymlink)
             break;
@@ -3373,7 +3373,7 @@ EvalState::resolveLookupPathPath(const LookupPath::Path & value0, bool initAcces
             auto storePath = fetchToStore(fetchSettings, *store, SourcePath(accessor), FetchMode::Copy);
             return finish(this->storePath(storePath));
         } catch (Error & e) {
-            logWarning({.msg = HintFmt("Nix search path entry '%1%' cannot be downloaded, ignoring", value)});
+            logWarning({}, HintFmt("Nix search path entry '%1%' cannot be downloaded, ignoring", value));
         }
     }
 
@@ -3409,7 +3409,7 @@ EvalState::resolveLookupPathPath(const LookupPath::Path & value0, bool initAcces
             if (auto accessor = path.accessor.dynamic_pointer_cast<FilteringSourceAccessor>())
                 accessor->checkAccess(path.path);
 
-            logWarning({.msg = HintFmt("Nix search path entry '%1%' does not exist, ignoring", value)});
+            logWarning({}, HintFmt("Nix search path entry '%1%' does not exist, ignoring", value));
         }
     }
 
@@ -3503,7 +3503,8 @@ void forceNoNullByte(std::string_view s, std::function<Pos()> pos)
     if (s.find('\0') != s.npos) {
         using namespace std::string_view_literals;
         auto str = replaceStrings(std::string(s), "\0"sv, "␀"sv);
-        Error error("input string '%s' cannot be represented as Nix string because it contains null bytes", str);
+        UnstructuredError error(
+            "input string '%s' cannot be represented as Nix string because it contains null bytes", str);
         if (pos) {
             error.atPos(pos());
         }

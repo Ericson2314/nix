@@ -106,7 +106,7 @@ struct ArchiveCompressionSink : CompressionSink
     {
         archive = archive_write_new();
         if (!archive)
-            throw Error("failed to initialize libarchive");
+            throw UnstructuredError("failed to initialize libarchive");
 
         auto [addFilter, format] = [method]() -> std::pair<int (*)(struct archive *), const char *> {
             switch (method) {
@@ -153,7 +153,7 @@ struct ArchiveCompressionSink : CompressionSink
         if (err == ARCHIVE_EOF)
             throw EndOfFile("reached end of archive");
         else if (err != ARCHIVE_OK)
-            throw Error(reason, archive_error_string(this->archive));
+            throw UnstructuredError(reason, archive_error_string(this->archive));
     }
 
     void writeUnbuffered(std::string_view data) override

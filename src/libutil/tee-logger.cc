@@ -38,10 +38,10 @@ public:
             logger->log(lvl, s);
     }
 
-    void logEI(const ErrorInfo & ei) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
     {
         for (auto & logger : loggers)
-            logger->logEI(ei);
+            logger->logEI(ei, msg);
     }
 
     void startActivity(

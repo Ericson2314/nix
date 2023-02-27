@@ -131,7 +131,7 @@ void remountReadOnlyWritable(const std::filesystem::path & path)
         return;
 
     if (!havePrivateMountNs)
-        throw Error(
+        throw UnstructuredError(
             "cannot remount %s writable: not in a private mount namespace, "
             "so the remount would affect the host mount table. "
             "This usually happens inside containers or user namespaces where unshare(CLONE_NEWNS) is not permitted",

@@ -26,7 +26,7 @@ void initLibUtil();
  */
 std::vector<char *> stringsToCharPtrs(const Strings & ss);
 
-MakeError(FormatError, Error);
+MakeError(FormatError, UnstructuredError);
 
 template<class... Parts>
 auto concatStrings(Parts &&... parts)

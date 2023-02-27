@@ -169,7 +169,8 @@ static std::optional<StorePath> deepQueryPartialDerivationOutputImpl(
     auto [drv, resolvedDrvPath] = resolveDerivation(store, drvPath, evalStore_, queryRealisation, cache, resCache);
 
     if (drv.outputs.count(outputName) == 0)
-        throw Error("derivation '%s' does not have an output named '%s'", store.printStorePath(drvPath), outputName);
+        throw UnstructuredError(
+            "derivation '%s' does not have an output named '%s'", store.printStorePath(drvPath), outputName);
 
     DrvOutput id{resolvedDrvPath, outputName};
     auto it = resCache.find(id);

@@ -64,7 +64,7 @@ void BinaryCacheStore::init()
             auto value = trim(line.substr(colon + 1, std::string::npos));
             if (name == "StoreDir") {
                 if (value != storeDir)
-                    throw Error(
+                    throw UnstructuredError(
                         "binary cache '%s' is for Nix stores with prefix '%s', not '%s'",
                         config.getHumanReadableURI(),
                         value,
@@ -282,7 +282,7 @@ void BinaryCacheStore::uploadNarInfo(ref<NarInfo> narInfo)
             if (ref != narInfo->path)
                 queryPathInfo(ref);
         } catch (InvalidPath &) {
-            throw Error(
+            throw UnstructuredError(
                 "cannot add '%s' to the binary cache because the reference '%s' is not valid",
                 printStorePath(narInfo->path),
                 printStorePath(ref));
@@ -557,7 +557,7 @@ void BinaryCacheStore::narFromPath(const StorePath & storePath, Sink & sink)
     try {
         getFile(info->url, *decompressor);
     } catch (NoSuchBinaryCacheFile & e) {
-        throw SubstituteGone(std::move(e.info()));
+        throw SubstituteGone(e.info(), e.renderMessage());
     }
 
     decompressor->finish();

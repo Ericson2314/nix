@@ -291,7 +291,7 @@ void MixProfile::updateProfile(Store & store_, const StorePath & storePath)
         return;
     auto * store = dynamic_cast<LocalFSStore *>(&store_);
     if (!store)
-        throw Error("'--profile' is not supported for this Nix store");
+        throw UnstructuredError("'--profile' is not supported for this Nix store");
     auto profile2 = absPath(*profile);
     switchLink(profile2, createGeneration(*store, profile2, storePath));
 }

@@ -348,7 +348,7 @@ struct SelfPipe
 } // namespace unix
 #endif
 
-MakeError(EndOfFile, Error);
+MakeError(EndOfFile, UnstructuredError);
 
 #ifdef _WIN32
 

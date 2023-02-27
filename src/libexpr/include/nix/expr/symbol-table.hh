@@ -121,7 +121,7 @@ public:
     {
         auto size = key.s.size();
         if (size >= std::numeric_limits<uint32_t>::max()) {
-            throw Error("Size of symbol exceeds 4GiB and cannot be stored");
+            throw UnstructuredError("Size of symbol exceeds 4GiB and cannot be stored");
         }
         // for multi-threaded implementations: lock store and allocator here
         const auto & [v, idx] = key.store.add(SymbolValue{});

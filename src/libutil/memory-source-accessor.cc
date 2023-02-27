@@ -168,7 +168,8 @@ SourcePath MemorySourceAccessor::addFile(CanonPath path, std::string && contents
     try {
         f = open(path, File{File::Regular{}});
         if (!f)
-            throw Error("file '%s' cannot be created because some parent directories don't exist", showPath(path));
+            throw UnstructuredError(
+                "file '%s' cannot be created because some parent directories don't exist", showPath(path));
     } catch (SourceAccessorError & e) {
         e.addTrace({}, "while creating file '%s'", showPath(path));
         throw;
@@ -189,7 +190,7 @@ void MemorySink::createDirectory(const CanonPath & path)
     try {
         f = dst.open(path, File{File::Directory{}});
         if (!f)
-            throw Error(
+            throw UnstructuredError(
                 "directory '%s' cannot be created because some parent directories don't exist", dst.showPath(path));
     } catch (SourceAccessorError & e) {
         e.addTrace({}, "while creating directory '%s'", dst.showPath(path));
@@ -219,7 +220,8 @@ void MemorySink::createRegularFile(const CanonPath & path, fun<void(CreateRegula
     try {
         f = dst.open(path, File{File::Regular{}});
         if (!f)
-            throw Error("file '%s' cannot be created because some parent directories don't exist", dst.showPath(path));
+            throw UnstructuredError(
+                "file '%s' cannot be created because some parent directories don't exist", dst.showPath(path));
     } catch (SourceAccessorError & e) {
         e.addTrace({}, "while creating regular file '%s'", dst.showPath(path));
         throw;
@@ -239,7 +241,7 @@ void CreateMemoryRegularFile::isExecutable()
 void CreateMemoryRegularFile::preallocateContents(uint64_t len)
 {
     if (len > std::numeric_limits<decltype(regularFile.contents)::size_type>::max())
-        throw Error("cannot preallocate contents for a file that is too large to fit in memory");
+        throw UnstructuredError("cannot preallocate contents for a file that is too large to fit in memory");
     regularFile.contents.reserve(len);
 }
 
@@ -254,7 +256,7 @@ void MemorySink::createSymlink(const CanonPath & path, const std::string & targe
     try {
         f = dst.open(path, File{File::Symlink{}});
         if (!f)
-            throw Error(
+            throw UnstructuredError(
                 "symlink '%s' cannot be created because some parent directories don't exist", dst.showPath(path));
     } catch (SourceAccessorError & e) {
         e.addTrace({}, "while creating symlink '%s'", dst.showPath(path));

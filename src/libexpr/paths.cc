@@ -44,7 +44,7 @@ void EvalState::ensureLazyPathCopied(const StorePath & path)
        from it. Alternatively, the caching might be unsound and fetcher cache is poisoned somehow.
        See https://github.com/NixOS/nix/issues/14317. */
     if (storePath != path) {
-        throw Error(
+        throw UnstructuredError(
             (unsigned int) 102,
             "store path ('%1%') was hashed to avoid a full copy at first, but upon reading it again, the contents have changed ('%2%'), so we can not proceed. Make sure files do not change during evaluation",
             store->printStorePath(path),
@@ -79,7 +79,7 @@ EvalState::mountInput(fetchers::Input & input, const fetchers::Input & originalI
     input.attrs.insert_or_assign("narHash", narHash.to_string(HashFormat::SRI, true));
 
     if (originalInput.getNarHash() && narHash != *originalInput.getNarHash())
-        throw Error(
+        throw UnstructuredError(
             (unsigned int) 102,
             "NAR hash mismatch in input '%s', expected '%s' but got '%s'",
             originalInput.to_string(),

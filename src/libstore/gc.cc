@@ -776,7 +776,7 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
                         maybeDeleteReferrersClosure(i);
 
                         if (options.action == GCOptions::gcDeleteSpecific && !dead.contains(i))
-                            throw Error(
+                            throw UnstructuredError(
                                 "Cannot delete path '%1%' since it is still alive. "
                                 "To find out why, use: "
                                 "nix-store --query --roots and nix-store --query --referrers",
@@ -794,7 +794,7 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
                         printInfo("deleting garbage...");
                         break;
                     case GCOptions::gcDeleteSpecific:
-                        throw Error("Cannot delete the entire store");
+                        throw UnstructuredError("Cannot delete the entire store");
                     case GCOptions::gcReturnDead:
                     case GCOptions::gcReturnLive:
                         printInfo("determining live/dead paths...");

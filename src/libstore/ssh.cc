@@ -18,7 +18,7 @@ static std::string parsePublicHostKey(std::string_view host, std::string_view ss
     }
 }
 
-class InvalidSSHAuthority final : public CloneableError<InvalidSSHAuthority, Error>
+class InvalidSSHAuthority final : public CloneableError<InvalidSSHAuthority, UnstructuredError>
 {
     void anchor() override;
 public:
@@ -218,7 +218,7 @@ std::unique_ptr<SSHMaster::Connection> SSHMaster::startCommand(OsStrings && comm
 
         if (reply != "started") {
             printTalkative("SSH stdout first line: %s", reply);
-            throw Error("failed to start SSH connection to '%s'", authority.host);
+            throw UnstructuredError("failed to start SSH connection to '%s'", authority.host);
         }
     }
 
@@ -284,7 +284,7 @@ std::filesystem::path SSHMaster::startMaster()
 
     if (reply != "started") {
         printTalkative("SSH master stdout first line: %s", reply);
-        throw Error("failed to start SSH master connection to '%s'", authority.host);
+        throw UnstructuredError("failed to start SSH master connection to '%s'", authority.host);
     }
 
     return state->socketPath;

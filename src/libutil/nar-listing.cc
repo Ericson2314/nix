@@ -70,7 +70,7 @@ NarListing parseNarListing(Source & source)
             } else {
                 auto * parentDir = std::get_if<NarListing::Directory>(&parents.top()->raw);
                 if (!parentDir)
-                    throw Error("NAR file missing parent directory of path '%s'", path);
+                    throw UnstructuredError("NAR file missing parent directory of path '%s'", path);
                 auto result = parentDir->entries.emplace(*path.baseName(), std::move(member));
                 parents.push(&result.first->second);
                 return result.first->second;
@@ -164,7 +164,7 @@ static ListNarResult<deep> listNarImpl(SourceAccessor & accessor, const CanonPat
     case SourceAccessor::Type::tFifo:
     case SourceAccessor::Type::tUnknown:
     default:
-        throw Error("file '%s' has an unsupported type", accessor.showPath(path));
+        throw UnstructuredError("file '%s' has an unsupported type", accessor.showPath(path));
     }
 }
 

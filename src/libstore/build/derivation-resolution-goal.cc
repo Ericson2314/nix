@@ -51,7 +51,7 @@ DerivationResolutionGoal::realiseInputs(const Derivation & drv, BuildMode buildM
                     if (checkImpureInputs && checkedInputDrvs.insert(inputDrvPath).second) {
                         auto inputDrv = worker.evalStore.readDerivation(inputDrvPath);
                         if (type(inputDrv).isImpure())
-                            throw Error(
+                            throw UnstructuredError(
                                 "pure derivation '%s' depends on impure derivation '%s'",
                                 worker.store.printStorePath(drvPath),
                                 worker.store.printStorePath(inputDrvPath));

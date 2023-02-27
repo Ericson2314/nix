@@ -76,7 +76,7 @@ struct SimpleUserLock : UserLock
         /* Get the members of the build-users-group. */
         struct group * gr = getgrnam(buildUsersGroup.c_str());
         if (!gr)
-            throw Error("the group '%s' specified in 'build-users-group' does not exist", buildUsersGroup);
+            throw UnstructuredError("the group '%s' specified in 'build-users-group' does not exist", buildUsersGroup);
 
         /* Copy the result of getgrnam. */
         Strings users;
@@ -86,7 +86,7 @@ struct SimpleUserLock : UserLock
         }
 
         if (users.empty())
-            throw Error("the build users group '%s' has no members", buildUsersGroup);
+            throw UnstructuredError("the build users group '%s' has no members", buildUsersGroup);
 
         /* Find a user account that isn't currently in use for another
            build. */
@@ -95,7 +95,7 @@ struct SimpleUserLock : UserLock
 
             struct passwd * pw = getpwnam(i.c_str());
             if (!pw)
-                throw Error("the user '%s' in the group '%s' does not exist", i, buildUsersGroup);
+                throw UnstructuredError("the user '%s' in the group '%s' does not exist", i, buildUsersGroup);
 
             auto fnUserLock = userPoolDir / std::to_string(pw->pw_uid);
 
@@ -112,7 +112,7 @@ struct SimpleUserLock : UserLock
 
                 /* Sanity check... */
                 if (lock->uid == getuid() || lock->uid == geteuid())
-                    throw Error("the Nix user should not be a member of '%s'", buildUsersGroup);
+                    throw UnstructuredError("the Nix user should not be a member of '%s'", buildUsersGroup);
 
 #ifdef __linux__
                 /* Get the list of supplementary groups of this user. This is
@@ -196,7 +196,8 @@ struct AutoUserLock : UserLock
 
                 auto pw = getpwuid(firstUid);
                 if (pw)
-                    throw Error("auto-allocated UID %d clashes with existing user account '%s'", firstUid, pw->pw_name);
+                    throw UnstructuredError(
+                        "auto-allocated UID %d clashes with existing user account '%s'", firstUid, pw->pw_name);
 
                 auto lock = std::make_unique<AutoUserLock>();
                 lock->fdUserLock = std::move(fd);
@@ -206,7 +207,8 @@ struct AutoUserLock : UserLock
                 else {
                     struct group * gr = getgrnam(buildUsersGroup.c_str());
                     if (!gr)
-                        throw Error("the group '%s' specified in 'build-users-group' does not exist", buildUsersGroup);
+                        throw UnstructuredError(
+                            "the group '%s' specified in 'build-users-group' does not exist", buildUsersGroup);
                     lock->firstGid = gr->gr_gid;
                 }
                 lock->nrIds = nrIds;

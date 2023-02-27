@@ -190,7 +190,7 @@ TEST_F(ValuePrintingTests, vFailed)
 {
     Value v;
     try {
-        throw Error("nope");
+        throw UnstructuredError("nope");
     } catch (...) {
         v.mkFailed(std::current_exception(), nullptr);
     }

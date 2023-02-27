@@ -9,7 +9,7 @@
 
 namespace nix {
 
-MakeError(BadHash, Error);
+MakeError(BadHash, UnstructuredError);
 
 enum struct HashAlgorithm : char { MD5 = 42, SHA1, SHA256, SHA512, BLAKE3 };
 

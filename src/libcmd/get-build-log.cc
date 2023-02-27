@@ -25,7 +25,7 @@ std::string fetchBuildLog(ref<Store> store, const StorePath & path, std::string_
         return *log;
     }
 
-    throw Error("build log of '%s' is not available", what);
+    throw UnstructuredError("build log of '%s' is not available", what);
 }
 
 } // namespace nix

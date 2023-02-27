@@ -15,7 +15,7 @@
 
 namespace nix {
 
-MakeError(UploadToS3, Error);
+MakeError(UploadToS3, UnstructuredError);
 
 void UploadToS3::anchor() {}
 
@@ -148,7 +148,7 @@ void S3BinaryCacheStore::upsertFile(
             auto [hash, gotLength] = hashSink.finish();
             /* Use this opportunity to check that the upload size matches what we expect. */
             if (gotLength != size)
-                throw Error("unexpected size for upload '%s', expected %d, got: %d", path, size, gotLength);
+                throw UnstructuredError("unexpected size for upload '%s', expected %d, got: %d", path, size, gotLength);
             /* The Base64 encoded 128-bit MD5 digest of the message (without the headers) according to RFC 1864:
                https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html */
             uploadHeaders.push_back({"Content-MD5", hash.to_string(HashFormat::Base64, /*includeAlgo=*/false)});
@@ -188,7 +188,7 @@ void S3BinaryCacheStore::upload(
 {
     debug("using S3 regular upload for '%s' (%d bytes)", path, sizeHint);
     if (sizeHint > AWS_MAX_PART_SIZE)
-        throw Error(
+        throw UnstructuredError(
             "file too large for S3 upload without multipart: %s would exceed maximum size of %s. Consider enabling multipart-upload.",
             renderSize(sizeHint),
             renderSize(AWS_MAX_PART_SIZE));
@@ -227,7 +227,7 @@ S3BinaryCacheStore::MultipartSink::MultipartSink(
         uint64_t minChunkSize = (sizeHint + AWS_MAX_PART_COUNT - 1) / AWS_MAX_PART_COUNT;
 
         if (minChunkSize > AWS_MAX_PART_SIZE) {
-            throw Error(
+            throw UnstructuredError(
                 "file too large for S3 multipart upload: %s would require chunk size of %s "
                 "(max %s) to stay within %d part limit",
                 renderSize(sizeHint),
@@ -278,7 +278,7 @@ void S3BinaryCacheStore::MultipartSink::finish()
 
     try {
         if (partEtags.empty()) {
-            throw Error("no data read from stream");
+            throw UnstructuredError("no data read from stream");
         }
         store.completeMultipartUpload(path, uploadId, partEtags);
     } catch (Error & e) {
@@ -333,14 +333,14 @@ std::string S3BinaryCacheStore::createMultipartUpload(
         return match[1];
     }
 
-    throw Error("S3 CreateMultipartUpload response missing <UploadId>");
+    throw UnstructuredError("S3 CreateMultipartUpload response missing <UploadId>");
 }
 
 std::string
 S3BinaryCacheStore::uploadPart(std::string_view key, std::string_view uploadId, uint64_t partNumber, std::string data)
 {
     if (partNumber > AWS_MAX_PART_COUNT) {
-        throw Error("S3 multipart upload exceeded %d part limit", AWS_MAX_PART_COUNT);
+        throw UnstructuredError("S3 multipart upload exceeded %d part limit", AWS_MAX_PART_COUNT);
     }
 
     auto req = makeRequest(key);
@@ -358,7 +358,7 @@ S3BinaryCacheStore::uploadPart(std::string_view key, std::string_view uploadId, 
     auto result = fileTransfer->enqueueFileTransfer(req).get();
 
     if (result.etag.empty()) {
-        throw Error("S3 UploadPart response missing ETag for part %d", partNumber);
+        throw UnstructuredError("S3 UploadPart response missing ETag for part %d", partNumber);
     }
 
     debug("Part %d uploaded, ETag: %s", partNumber, result.etag);

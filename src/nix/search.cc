@@ -193,7 +193,7 @@ struct CmdSearch : InstallableValueCommand, MixJSON
             printJSON(*jsonOut);
 
         if (!json && !results)
-            throw Error("no results for the given search term(s)!");
+            throw UnstructuredError("no results for the given search term(s)!");
     }
 };
 

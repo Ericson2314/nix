@@ -79,7 +79,7 @@ void processExpr(
                 /* What output do we want? */
                 std::string outputName = i.queryOutputName();
                 if (outputName == "")
-                    throw Error("derivation '%1%' lacks an 'outputName' attribute", drvPathS);
+                    throw UnstructuredError("derivation '%1%' lacks an 'outputName' attribute", drvPathS);
 
                 if (gcRoot.empty())
                     printGCWarning();
@@ -183,7 +183,7 @@ static int main_nix_instantiate(int argc, char ** argv)
                 if (auto fn = p.getPhysicalPath())
                     std::cout << fn->string() << std::endl;
                 else
-                    throw Error("'%s' has no physical path", p);
+                    throw UnstructuredError("'%s' has no physical path", p);
             }
             return 0;
         }

@@ -23,10 +23,10 @@ static void builtinFetchurl(const BuiltinBuilderContext & ctx)
 
     auto out = get(ctx.drv.outputs, "out");
     if (!out)
-        throw Error("'builtin:fetchurl' requires an 'out' output");
+        throw UnstructuredError("'builtin:fetchurl' requires an 'out' output");
 
     if (!(type(ctx.drv).isFixed() || type(ctx.drv).isImpure()))
-        throw Error("'builtin:fetchurl' must be a fixed-output or impure derivation");
+        throw UnstructuredError("'builtin:fetchurl' must be a fixed-output or impure derivation");
 
     auto storePath = ctx.outputs.at("out");
     auto mainUrl = ctx.drv.env.at("url");

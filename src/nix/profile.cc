@@ -142,7 +142,8 @@ struct ProfileManifest
                 sOriginalUrl = "originalUrl";
                 break;
             default:
-                throw Error("profile manifest %s has unsupported version %d", PathFmt(manifestPath), version);
+                throw UnstructuredError(
+                    "profile manifest %s has unsupported version %d", PathFmt(manifestPath), version);
             }
 
             auto elems = json["elements"];
@@ -442,7 +443,7 @@ struct CmdProfileAdd : InstallablesCommand, MixDefaultProfile
             auto [newConflictingFilePath, newEntryName, newConflictingRefs] =
                 findRefByFilePath(manifest.elements.rbegin(), manifest.elements.rend());
 
-            throw Error(
+            throw UnstructuredError(
                 "An existing package already provides the following file:\n"
                 "\n"
                 "  %1%\n"
@@ -601,7 +602,7 @@ public:
              .handler = {[this](std::vector<std::string> args) {
                  for (auto & arg : args) {
                      if (auto n = string2Int<size_t>(arg)) {
-                         throw Error("'nix profile' no longer supports indices ('%d')", *n);
+                         throw UnstructuredError("'nix profile' no longer supports indices ('%d')", *n);
                      } else if (getStore()->isStorePath(arg)) {
                          _matchers.push_back(make_ref<StorePathMatcher>(getStore()->parseStorePath(arg)));
                      } else {

@@ -558,7 +558,7 @@ public:
         , body(body)
     {
         if (formals.formals.size() > nFormals) [[unlikely]] {
-            auto err = Error(
+            auto err = UnstructuredError(
                 "too many formal arguments, implementation supports at most %1%",
                 std::numeric_limits<decltype(nFormals)>::max());
             if (pos)

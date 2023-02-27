@@ -101,7 +101,7 @@ ref<StoreConfig> resolveStoreConfig(StoreReference && storeURI)
                     if (implem.uriSchemes.count(g.scheme))
                         return implem.parseConfig(g.scheme, g.authority, params);
 
-                throw Error("don't know how to open Nix store with scheme '%s'", g.scheme);
+                throw UnstructuredError("don't know how to open Nix store with scheme '%s'", g.scheme);
             },
         },
         storeURI.variant);
@@ -140,7 +140,7 @@ std::list<ref<Store>> getDefaultSubstituters()
                 try {
                     opened[i] = openStore(StoreReference{refs[i]}).get_ptr();
                 } catch (Error & e) {
-                    logWarning(e.info());
+                    logExWarning(e);
                 }
             });
         pool.process();

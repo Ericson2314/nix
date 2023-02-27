@@ -438,7 +438,7 @@ struct GitInputScheme : InputScheme
         if (ref)
             res.attrs.insert_or_assign("ref", *ref);
         if (!res.getRef() && res.getRev())
-            throw Error("Git input '%s' has a commit hash but no branch/tag name", res.to_string());
+            throw UnstructuredError("Git input '%s' has a commit hash but no branch/tag name", res.to_string());
         return res;
     }
 
@@ -478,7 +478,7 @@ struct GitInputScheme : InputScheme
         auto repoInfo = getRepoInfo(input);
         auto repoPath = repoInfo.getPath();
         if (!repoPath)
-            throw Error(
+            throw UnstructuredError(
                 "cannot commit '%s' to Git repository '%s' because it's not a working tree", path, input.to_string());
 
         writeFile(*repoPath / path.rel(), contents);
@@ -577,7 +577,7 @@ struct GitInputScheme : InputScheme
         {
             if (workdirInfo.isDirty) {
                 if (!settings.allowDirty)
-                    throw Error("Git tree '%s' is dirty", locationToArg());
+                    throw UnstructuredError("Git tree '%s' is dirty", locationToArg());
 
                 if (settings.warnDirty)
                     warn("Git tree '%s' is dirty", locationToArg());
@@ -616,7 +616,7 @@ struct GitInputScheme : InputScheme
     {
         auto checkHashAlgorithm = [&](const std::optional<Hash> & hash) {
             if (hash.has_value() && !(hash->algo == HashAlgorithm::SHA1 || hash->algo == HashAlgorithm::SHA256))
-                throw Error(
+                throw UnstructuredError(
                     "Hash '%s' is not supported by Git. Supported types are sha1 and sha256.",
                     hash->to_string(HashFormat::Base16, true));
         };
@@ -732,7 +732,8 @@ struct GitInputScheme : InputScheme
         ref<Cache> cache, const RepoInfo & repoInfo, const std::filesystem::path & repoDir, const Hash & rev) const
     {
         if (GitRepo::openRepo(repoDir, {})->isShallow())
-            throw Error("'%s' is a shallow Git repository, so 'revCount' is not available", repoInfo.locationToArg());
+            throw UnstructuredError(
+                "'%s' is a shallow Git repository, so 'revCount' is not available", repoInfo.locationToArg());
 
         Cache::Key key{"gitRevCount", {{"rev", rev.gitRev()}}};
 
@@ -805,7 +806,7 @@ struct GitInputScheme : InputScheme
             if (input.getRev() && repo)
                 repo->verifyCommit(*input.getRev(), publicKeys);
             else
-                throw Error(
+                throw UnstructuredError(
                     "commit verification is required for Git repository '%s', but it's dirty", input.to_string());
         }
     }
@@ -882,7 +883,7 @@ struct GitInputScheme : InputScheme
                 } catch (Error & e) {
                     if (!std::filesystem::exists(localRefFile))
                         throw;
-                    logError(e.info());
+                    logExError(e);
                     warn(
                         "could not update local clone of Git repository '%s'; continuing with the most recent version",
                         repoInfo.locationToArg());
@@ -892,7 +893,7 @@ struct GitInputScheme : InputScheme
                     if (!input.getRev())
                         setWriteTime(localRefFile, now, now);
                 } catch (Error & e) {
-                    warn("could not update mtime for file %s: %s", PathFmt(localRefFile), e.info().msg);
+                    warn("could not update mtime for file %s: %s", PathFmt(localRefFile), e.renderMessage());
                 }
                 if (!originalRef && !storeCachedHead(repoUrl.to_string(), shallow, ref))
                     warn("could not update cached head '%s' for '%s'", ref, repoInfo.locationToArg());
@@ -900,7 +901,7 @@ struct GitInputScheme : InputScheme
 
             if (auto rev = input.getRev()) {
                 if (!repo->hasObject(*rev))
-                    throw Error(
+                    throw UnstructuredError(
                         "Cannot find Git revision '%s' in ref '%s' of repository '%s'! "
                         "Please make sure that the " ANSI_BOLD "rev" ANSI_NORMAL " exists on the " ANSI_BOLD
                         "ref" ANSI_NORMAL " you've specified or add " ANSI_BOLD "allRefs = true;" ANSI_NORMAL

@@ -10,7 +10,7 @@ namespace nix {
 class EvalState;
 struct Value;
 
-MakeError(JSONParseError, Error);
+MakeError(JSONParseError, UnstructuredError);
 
 void parseJSON(EvalState & state, const std::string_view & s, Value & v);
 

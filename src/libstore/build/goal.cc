@@ -163,7 +163,7 @@ Goal::Done Goal::amDone(ExitCode result)
     if (result == ecFailed) {
         if (auto * failure = buildResult.tryGetFailure()) {
             if (!preserveFailure && !waiters.empty())
-                logError(failure->info());
+                logExError(*failure);
         }
     }
 

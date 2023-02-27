@@ -488,7 +488,7 @@ ref<FileTransfer> getFileTransfer();
  */
 ref<FileTransfer> makeFileTransfer(const FileTransferSettings & settings = fileTransferSettings);
 
-class FileTransferError final : public CloneableError<FileTransferError, Error>
+class FileTransferError final : public CloneableError<FileTransferError, UnstructuredError>
 {
 private:
     void anchor() override;

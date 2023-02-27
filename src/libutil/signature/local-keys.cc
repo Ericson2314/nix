@@ -105,7 +105,7 @@ SecretKey::SecretKey(std::string_view s)
     : Key{s, true}
 {
     if (key.size() != crypto_sign_SECRETKEYBYTES)
-        throw Error("secret key is not valid");
+        throw UnstructuredError("secret key is not valid");
 }
 
 Signature SecretKey::signDetached(std::string_view data) const
@@ -131,7 +131,7 @@ SecretKey SecretKey::generate(std::string_view name)
     unsigned char pk[crypto_sign_PUBLICKEYBYTES];
     unsigned char sk[crypto_sign_SECRETKEYBYTES];
     if (crypto_sign_keypair(pk, sk) != 0)
-        throw Error("key generation failed");
+        throw UnstructuredError("key generation failed");
 
     return SecretKey(name, std::string((char *) sk, crypto_sign_SECRETKEYBYTES));
 }
@@ -140,7 +140,7 @@ PublicKey::PublicKey(std::string_view s)
     : Key{s, false}
 {
     if (key.size() != crypto_sign_PUBLICKEYBYTES)
-        throw Error("public key is not valid");
+        throw UnstructuredError("public key is not valid");
 }
 
 bool PublicKey::verifyDetached(std::string_view data, const Signature & sig) const
@@ -154,7 +154,7 @@ bool PublicKey::verifyDetached(std::string_view data, const Signature & sig) con
 bool PublicKey::verifyDetachedAnon(std::string_view data, const Signature & sig) const
 {
     if (sig.sig.size() != crypto_sign_BYTES)
-        throw Error("signature is not valid");
+        throw UnstructuredError("signature is not valid");
 
     return crypto_sign_verify_detached(
                (unsigned char *) sig.sig.data(),

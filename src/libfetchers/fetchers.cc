@@ -29,7 +29,7 @@ void registerInputScheme(std::shared_ptr<InputScheme> && inputScheme)
 {
     auto schemeName = inputScheme->schemeName();
     if (!inputSchemes().emplace(schemeName, std::move(inputScheme)).second)
-        throw Error("Input scheme with name %s already registered", schemeName);
+        throw UnstructuredError("Input scheme with name %s already registered", schemeName);
 }
 
 const InputSchemeMap & getAllInputSchemes()
@@ -66,10 +66,10 @@ Input Input::fromURL(const ParsedURL & url, bool requireTree)
     // Provide a helpful hint when user tries file+git instead of git+file
     auto parsedScheme = parseUrlScheme(url.scheme);
     if (parsedScheme.application == "file" && parsedScheme.transport == "git") {
-        throw Error("input '%s' is unsupported; did you mean 'git+file' instead of 'file+git'?", url);
+        throw UnstructuredError("input '%s' is unsupported; did you mean 'git+file' instead of 'file+git'?", url);
     }
 
-    throw Error("input '%s' is unsupported", url);
+    throw UnstructuredError("input '%s' is unsupported", url);
 }
 
 Input Input::fromAttrs(Attrs && attrs)
@@ -77,7 +77,7 @@ Input Input::fromAttrs(Attrs && attrs)
     auto schemeName = ({
         auto schemeNameOpt = maybeGetStrAttr(attrs, "type");
         if (!schemeNameOpt)
-            throw Error("'type' attribute to specify input scheme is required but not provided");
+            throw UnstructuredError("'type' attribute to specify input scheme is required but not provided");
         *std::move(schemeNameOpt);
     });
 
@@ -106,7 +106,7 @@ Input Input::fromAttrs(Attrs && attrs)
 
     for (auto & [name, _] : attrs)
         if (name != "type" && name != "__final" && allowedAttrs.count(name) == 0)
-            throw Error("input attribute '%s' not supported by scheme '%s'", name, schemeName);
+            throw UnstructuredError("input attribute '%s' not supported by scheme '%s'", name, schemeName);
 
     auto res = inputScheme->inputFromAttrs(attrs);
     if (!res)
@@ -137,7 +137,7 @@ std::optional<std::string> Input::getFingerprint(Store & store) const
 ParsedURL Input::toURL() const
 {
     if (!scheme)
-        throw Error("cannot show unsupported input '%s'", attrsToJSON(attrs));
+        throw UnstructuredError("cannot show unsupported input '%s'", attrsToJSON(attrs));
     return scheme->toURL(*this);
 }
 
@@ -200,7 +200,7 @@ bool Input::contains(const Input & other) const
 std::pair<StorePath, Input> Input::fetchToStore(const Settings & settings, Store & store) const
 {
     if (!scheme)
-        throw Error("cannot fetch unsupported input '%s'", attrsToJSON(toAttrs()));
+        throw UnstructuredError("cannot fetch unsupported input '%s'", attrsToJSON(toAttrs()));
 
     auto [storePath, input] = [&]() -> std::pair<StorePath, Input> {
         try {
@@ -249,7 +249,7 @@ void Input::checkLocks(Input specified, Input & result)
         for (auto & field : specified.attrs) {
             auto field2 = result.attrs.find(field.first);
             if (field2 != result.attrs.end() && field.second != field2->second)
-                throw Error(
+                throw UnstructuredError(
                     "mismatch in field '%s' of input '%s', got '%s'",
                     field.first,
                     attrsToJSON(specified.attrs),
@@ -264,14 +264,14 @@ void Input::checkLocks(Input specified, Input & result)
     if (auto prevNarHash = specified.getNarHash()) {
         if (result.getNarHash() != prevNarHash) {
             if (result.getNarHash())
-                throw Error(
+                throw UnstructuredError(
                     (unsigned int) 102,
                     "NAR hash mismatch in input '%s', expected '%s' but got '%s'",
                     specified.to_string(),
                     prevNarHash->to_string(HashFormat::SRI, true),
                     result.getNarHash()->to_string(HashFormat::SRI, true));
             else
-                throw Error(
+                throw UnstructuredError(
                     (unsigned int) 102,
                     "NAR hash mismatch in input '%s', expected '%s' but got none",
                     specified.to_string(),
@@ -281,7 +281,8 @@ void Input::checkLocks(Input specified, Input & result)
 
     if (auto prevRev = specified.getRev()) {
         if (result.getRev() != prevRev)
-            throw Error("'rev' attribute mismatch in input '%s', expected %s", result.to_string(), prevRev->gitRev());
+            throw UnstructuredError(
+                "'rev' attribute mismatch in input '%s', expected %s", result.to_string(), prevRev->gitRev());
     }
 }
 
@@ -306,7 +307,7 @@ std::pair<ref<SourceAccessor>, Input> Input::getAccessorUnchecked(const Settings
     // FIXME: cache the accessor
 
     if (!scheme)
-        throw Error("cannot fetch unsupported input '%s'", attrsToJSON(toAttrs()));
+        throw UnstructuredError("cannot fetch unsupported input '%s'", attrsToJSON(toAttrs()));
 
     /* The tree may already be in the Nix store, or it could be
        substituted (which is often faster than fetching from the
@@ -386,7 +387,7 @@ Input Input::applyOverrides(std::optional<std::string> ref, std::optional<Hash> 
 void Input::clone(const Settings & settings, Store & store, const std::filesystem::path & destDir) const
 {
     if (!scheme)
-        throw Error("cannot clone unsupported input '%s'", attrsToJSON(attrs));
+        throw UnstructuredError("cannot clone unsupported input '%s'", attrsToJSON(attrs));
     scheme->clone(settings, store, *this, destDir);
 }
 
@@ -398,7 +399,8 @@ std::optional<std::filesystem::path> Input::getSourcePath() const
 void Input::putFile(const CanonPath & path, std::string_view contents, std::optional<std::string> commitMsg) const
 {
     if (!scheme)
-        throw Error("unsupported input '%s' does not support modifying file '%s'", attrsToJSON(attrs), path);
+        throw UnstructuredError(
+            "unsupported input '%s' does not support modifying file '%s'", attrsToJSON(attrs), path);
     return scheme->putFile(*this, path, contents, commitMsg);
 }
 
@@ -411,7 +413,7 @@ StorePath Input::computeStorePath(Store & store) const
 {
     auto narHash = getNarHash();
     if (!narHash)
-        throw Error("cannot compute store path for unlocked input '%s'", to_string());
+        throw UnstructuredError("cannot compute store path for unlocked input '%s'", to_string());
     return store.makeFixedOutputPath(
         getName(),
         FixedOutputInfo{
@@ -477,15 +479,16 @@ std::optional<time_t> Input::getLastModified() const
 
 ParsedURL InputScheme::toURL(const Input & input) const
 {
-    throw Error("don't know how to convert input '%s' to a URL", attrsToJSON(input.attrs));
+    throw UnstructuredError("don't know how to convert input '%s' to a URL", attrsToJSON(input.attrs));
 }
 
 Input InputScheme::applyOverrides(const Input & input, std::optional<std::string> ref, std::optional<Hash> rev) const
 {
     if (ref)
-        throw Error("don't know how to set branch/tag name of input '%s' to '%s'", input.to_string(), *ref);
+        throw UnstructuredError("don't know how to set branch/tag name of input '%s' to '%s'", input.to_string(), *ref);
     if (rev)
-        throw Error("don't know how to set revision of input '%s' to '%s'", input.to_string(), rev->gitRev());
+        throw UnstructuredError(
+            "don't know how to set revision of input '%s' to '%s'", input.to_string(), rev->gitRev());
     return input;
 }
 
@@ -497,14 +500,14 @@ std::optional<std::filesystem::path> InputScheme::getSourcePath(const Input & in
 void InputScheme::putFile(
     const Input & input, const CanonPath & path, std::string_view contents, std::optional<std::string> commitMsg) const
 {
-    throw Error("input '%s' does not support modifying file '%s'", input.to_string(), path);
+    throw UnstructuredError("input '%s' does not support modifying file '%s'", input.to_string(), path);
 }
 
 void InputScheme::clone(
     const Settings & settings, Store & store, const Input & input, const std::filesystem::path & destDir) const
 {
     if (std::filesystem::exists(destDir))
-        throw Error("cannot clone into existing path %s", PathFmt(destDir));
+        throw UnstructuredError("cannot clone into existing path %s", PathFmt(destDir));
 
     auto [accessor, input2] = getAccessor(settings, store, input);
 

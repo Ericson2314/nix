@@ -116,21 +116,21 @@ static DownloadTarballResult downloadTarball_(
     if (url.scheme == "file") {
         std::filesystem::path localPath = urlPathToPath(url.path);
         if (!localPath.is_absolute()) {
-            throw Error(
+            throw UnstructuredError(
                 "tarball '%s' must use an absolute path. "
                 "The 'file' scheme does not support relative paths.",
                 url);
         }
         if (!exists(localPath)) {
-            throw Error("tarball %s does not exist.", PathFmt(localPath));
+            throw UnstructuredError("tarball %s does not exist.", PathFmt(localPath));
         }
         if (is_directory(localPath)) {
             if (exists(localPath / ".git")) {
-                throw Error(
+                throw UnstructuredError(
                     "tarball %s is a git repository, not a tarball. Please use `git+file` as the scheme.",
                     PathFmt(localPath));
             }
-            throw Error("tarball %s is a directory, not a file.", PathFmt(localPath));
+            throw UnstructuredError("tarball %s is a directory, not a file.", PathFmt(localPath));
         }
     }
 
@@ -500,7 +500,7 @@ struct TarballInputScheme : CurlInputScheme
             // FIXME: would be nice to support arbitrary flakerefs
             // here, e.g. git flakes.
             if (immutableInput.getType() != "tarball")
-                throw Error("tarball 'Link' headers that redirect to non-tarball URLs are not supported");
+                throw UnstructuredError("tarball 'Link' headers that redirect to non-tarball URLs are not supported");
             input = immutableInput;
         }
 

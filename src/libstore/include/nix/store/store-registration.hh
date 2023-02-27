@@ -83,7 +83,7 @@ struct Implementations
         };
         auto [it, didInsert] = registered().insert({TConfig::name(), std::move(factory)});
         if (!didInsert) {
-            throw Error("Already registered store with name '%s'", it->first);
+            throw UnstructuredError("Already registered store with name '%s'", it->first);
         }
     }
 };

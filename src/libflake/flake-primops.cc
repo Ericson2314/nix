@@ -49,7 +49,7 @@ PrimOp getFlake(const Settings & settings)
 
             auto flakeRef = nix::parseFlakeRef(flakeRefS, {}, true);
             if (state.settings.pureEval && !flakeRef.input.isLocked(state.fetchSettings))
-                throw Error(
+                throw UnstructuredError(
                     "cannot call 'getFlake' on unlocked flake reference '%s', at %s (use --impure to override)",
                     flakeRefS,
                     state.positions[noPos]);

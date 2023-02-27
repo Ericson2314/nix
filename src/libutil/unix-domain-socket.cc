@@ -86,7 +86,7 @@ static bool tryBindConnectAtDir(
     auto * psaddr = reinterpret_cast<struct sockaddr *>(&addr);
 
     if (base.native().size() + 1 >= sizeof(addr.sun_path))
-        throw Error("socket path '%s' is too long", PathFmt(path));
+        throw UnstructuredError("socket path '%s' is too long", PathFmt(path));
 
     // O_PATH opens the directory as a path-resolution-only handle, with no read permission needed.
     AutoCloseFD dirfd = ::open(path.parent_path().c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC);
@@ -142,7 +142,7 @@ static void bindConnectProcHelper(
 
     if (pathStr.size() + 1 >= sizeof(addr.sun_path)) {
 #ifdef _WIN32
-        throw Error("cannot %s to socket at '%s': path is too long", operationName, pathStr);
+        throw UnstructuredError("cannot %s to socket at '%s': path is too long", operationName, pathStr);
 #else
         if (tryBindConnectAtDir(operationName, operation, operationAt, fd, path))
             return;
@@ -157,7 +157,7 @@ static void bindConnectProcHelper(
                     throw SysError("chdir to %s failed", PathFmt(dir));
                 auto base = path.filename();
                 if (base.native().size() + 1 >= sizeof(addr.sun_path))
-                    throw Error("socket path '%s' is too long", PathFmt(path));
+                    throw UnstructuredError("socket path '%s' is too long", PathFmt(path));
                 memcpy(addr.sun_path, base.c_str(), base.native().size() + 1);
                 if (operation(fd, psaddr, sizeof(addr)) == -1)
                     throw SysError("cannot %s to socket at '%s'", operationName, PathFmt(path));
@@ -171,7 +171,7 @@ static void bindConnectProcHelper(
         pipe.writeSide.close();
         auto errNo = string2Int<int>(chomp(drainFD(pipe.readSide.get())));
         if (!errNo || *errNo == -1)
-            throw Error("cannot %s to socket at '%s'", operationName, PathFmt(path));
+            throw UnstructuredError("cannot %s to socket at '%s'", operationName, PathFmt(path));
         else if (*errNo > 0) {
             errno = *errNo;
             throw SysError("cannot %s to socket at '%s'", operationName, PathFmt(path));

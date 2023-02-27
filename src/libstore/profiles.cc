@@ -129,7 +129,7 @@ void deleteGenerations(
     auto [gens, curGen] = findGenerations(profile);
 
     if (gensToDelete.count(*curGen))
-        throw Error("cannot delete current version of profile %1%", PathFmt(profile));
+        throw UnstructuredError("cannot delete current version of profile %1%", PathFmt(profile));
 
     for (auto & i : gens) {
         if (!gensToDelete.count(i.number))
@@ -150,7 +150,7 @@ static inline void iterDropUntil(Generations & gens, auto && i, auto && cond)
 void deleteGenerationsGreaterThan(const std::filesystem::path & profile, GenerationNumber max, bool dryRun)
 {
     if (max == 0)
-        throw Error("Must keep at least one generation, otherwise the current one would be deleted");
+        throw UnstructuredError("Must keep at least one generation, otherwise the current one would be deleted");
 
     PathLocks lock;
     lockProfile(lock, profile);
@@ -255,9 +255,9 @@ void switchGeneration(const std::filesystem::path & profile, std::optional<Gener
 
     if (!dst) {
         if (dstGen)
-            throw Error("profile version %1% does not exist", *dstGen);
+            throw UnstructuredError("profile version %1% does not exist", *dstGen);
         else
-            throw Error("no profile version older than the current (%1%) exists", curGen.value_or(0));
+            throw UnstructuredError("no profile version older than the current (%1%) exists", curGen.value_or(0));
     }
 
     notice("switching profile from version %d to %d", curGen.value_or(0), dst->number);

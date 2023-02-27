@@ -66,7 +66,8 @@ void SourceAccessor::dumpPath(const CanonPath & path, Sink & sink, PathFilter & 
         checkInterrupt();
 
         if (depth >= narMaxDepth)
-            throw Error("path '%s' exceeds maximum NAR directory depth of %d", accessor.showPath(path), narMaxDepth);
+            throw UnstructuredError(
+                "path '%s' exceeds maximum NAR directory depth of %d", accessor.showPath(path), narMaxDepth);
 
         auto st = accessor.lstat(path);
 
@@ -94,7 +95,7 @@ void SourceAccessor::dumpPath(const CanonPath & path, Sink & sink, PathFilter & 
                         name.erase(pos);
                     }
                     if (!unhacked.emplace(name, i.first).second)
-                        throw Error(
+                        throw UnstructuredError(
                             "file name collision between '%s' and '%s'", (path / unhacked[name]), (path / i.first));
                 } else
                     unhacked.emplace(i.first, i.first);
@@ -113,7 +114,7 @@ void SourceAccessor::dumpPath(const CanonPath & path, Sink & sink, PathFilter & 
             sink << "type" << "symlink" << "target" << accessor.readLink(path);
 
         else
-            throw Error("file '%s' has an unsupported type", path);
+            throw UnstructuredError("file '%s' has an unsupported type", path);
 
         sink << ")";
     }(*this, path, path, 0);

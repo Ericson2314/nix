@@ -35,7 +35,7 @@ nix_err nix_context_error(nix_c_context * context)
     } catch (nix::Error & e) {
         /* Storing this exception is annoying, take what we need here */
         context->last_err = e.what();
-        context->info = e.info();
+        context->info_msg = e.message();
         int status;
         const char * demangled = abi::__cxa_demangle(typeid(e).name(), 0, 0, &status);
         if (demangled) {
@@ -58,7 +58,7 @@ nix_err nix_set_err_msg(nix_c_context * context, nix_err err, const char * msg)
 {
     if (context == nullptr) {
         // todo last_err_code
-        throw nix::Error("Nix C api error: %s", msg);
+        throw nix::UnstructuredError("Nix C api error: %s", msg);
     }
     context->last_err_code = err;
     context->last_err = msg;
@@ -148,7 +148,7 @@ nix_err nix_err_info_msg(
     if (read_context->last_err_code != NIX_ERR_NIX_ERROR) {
         return nix_set_err_msg(context, NIX_ERR_UNKNOWN, "Last error was not a nix error");
     }
-    return call_nix_get_string_callback(read_context->info->msg.str(), callback, user_data);
+    return call_nix_get_string_callback(*read_context->info_msg, callback, user_data);
 }
 
 nix_err nix_err_code(const nix_c_context * read_context)

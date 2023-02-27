@@ -42,8 +42,8 @@ inline void checkInterrupt();
 /**
  * @note Never will happen on Windows
  */
-MakeError(Interrupted, BaseError);
-MakeError(Cancelled, BaseError);
+MakeError(Interrupted, Unstructured<BaseError>);
+MakeError(Cancelled, Unstructured<BaseError>);
 
 struct InterruptCallback
 {

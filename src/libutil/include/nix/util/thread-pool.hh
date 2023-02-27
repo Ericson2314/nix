@@ -14,7 +14,7 @@
 
 namespace nix {
 
-MakeError(ThreadPoolShutDown, Error);
+MakeError(ThreadPoolShutDown, UnstructuredError);
 
 /**
  * A simple thread pool that executes a queue of work items
@@ -168,7 +168,7 @@ void processGraph(const std::set<T> & nodes, fun<std::set<T>(const T &)> getEdge
     pool.process();
 
     if (!graph_.lock()->left.empty())
-        throw Error("graph processing incomplete (cyclic reference?)");
+        throw UnstructuredError("graph processing incomplete (cyclic reference?)");
 }
 
 } // namespace nix

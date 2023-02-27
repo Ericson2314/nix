@@ -31,7 +31,7 @@ struct CmdCopyLog : virtual CopyCommand, virtual InstallablesCommand
             if (auto log = srcLogStore.getBuildLog(drvPath))
                 dstLogStore.addBuildLog(drvPath, *log);
             else
-                throw Error("build log for '%s' is not available", srcStore->printStorePath(drvPath));
+                throw UnstructuredError("build log for '%s' is not available", srcStore->printStorePath(drvPath));
         }
     }
 };

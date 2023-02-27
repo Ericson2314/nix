@@ -24,7 +24,7 @@ SQLiteError::SQLiteError(
     , offset(offset)
 {
     auto offsetStr = (offset == -1) ? "" : "at offset " + std::to_string(offset) + ": ";
-    err.msg = HintFmt(
+    hint = HintFmt(
         "%s: %s%s, %s (in '%s')",
         Uncolored(hf.str()),
         offsetStr,
@@ -48,7 +48,7 @@ void SQLiteBusy::anchor() {}
 
     if (err == SQLITE_BUSY || err == SQLITE_PROTOCOL) {
         auto exp = SQLiteBusy(path, errMsg, err, exterr, offset, std::move(hf));
-        exp.err.msg = HintFmt(
+        exp.hint = HintFmt(
             err == SQLITE_PROTOCOL ? "SQLite database '%s' is busy (SQLITE_PROTOCOL)" : "SQLite database '%s' is busy",
             path ? path : "(in-memory)");
         throw std::move(exp);
@@ -101,7 +101,7 @@ SQLite::SQLite(const std::filesystem::path & path, Settings && settings)
     int ret = sqlite3_open_v2(uri.c_str(), &db, SQLITE_OPEN_URI | flags, vfs);
     if (ret != SQLITE_OK) {
         const char * err = sqlite3_errstr(ret);
-        throw Error("cannot open SQLite database %s: %s", PathFmt(path), err);
+        throw UnstructuredError("cannot open SQLite database %s: %s", PathFmt(path), err);
     }
 
     if (sqlite3_busy_timeout(db, 60 * 60 * 1000) != SQLITE_OK)
@@ -285,7 +285,7 @@ void handleSQLiteBusy(const SQLiteBusy & e, time_t & nextWarning)
     time_t now = time(nullptr);
     if (now > nextWarning) {
         nextWarning = now + 10;
-        logWarning({.msg = e.info().msg});
+        logExWarning(e);
     }
 
     /* Sleep for a while since retrying the transaction right away

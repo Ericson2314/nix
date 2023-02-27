@@ -132,7 +132,7 @@ static void canonicalisePathMetaData_(
 
     /* Really make sure that the path is of a supported type. */
     if (!(S_ISREG(st.st_mode) || S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode)))
-        throw Error("file %1% has an unsupported type", PathFmt(path));
+        throw UnstructuredError("file %1% has an unsupported type", PathFmt(path));
 
 #if NIX_SUPPORT_ACL
     stripXAttrs(path, options.ignoredAcls);

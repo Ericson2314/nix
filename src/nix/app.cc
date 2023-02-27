@@ -63,7 +63,7 @@ UnresolvedApp InstallableValue::toApp(EvalState & state)
             ? "app"
             : "derivation";
     if (type != expectedType)
-        throw Error("attribute '%s' should have type '%s'", cursor->getAttrPathStr(), expectedType);
+        throw UnstructuredError("attribute '%s' should have type '%s'", cursor->getAttrPathStr(), expectedType);
 
     if (type == "app") {
         auto [program, context] = cursor->getAttr("program")->getStringWithContext();
@@ -123,7 +123,7 @@ UnresolvedApp InstallableValue::toApp(EvalState & state)
     }
 
     else
-        throw Error("attribute '%s' has unsupported type '%s'", cursor->getAttrPathStr(), type);
+        throw UnstructuredError("attribute '%s' has unsupported type '%s'", cursor->getAttrPathStr(), type);
 }
 
 std::vector<BuiltPathWithResult> UnresolvedApp::build(ref<Store> evalStore, ref<Store> store)
@@ -144,7 +144,7 @@ App UnresolvedApp::resolve(ref<Store> evalStore, ref<Store> store)
     auto builtContext = build(evalStore, store);
     res.program = resolveString(*store, unresolved.program.string(), builtContext);
     if (!store->isInStore(res.program.string()))
-        throw Error("app program '%s' is not in the Nix store", res.program.string());
+        throw UnstructuredError("app program '%s' is not in the Nix store", res.program.string());
 
     return res;
 }

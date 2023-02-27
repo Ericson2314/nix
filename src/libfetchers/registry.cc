@@ -45,7 +45,7 @@ std::shared_ptr<Registry> Registry::read(const Settings & settings, const Source
         }
 
         else
-            throw Error("flake registry '%s' has unsupported version %d", path, version);
+            throw UnstructuredError("flake registry '%s' has unsupported version %d", path, version);
 
     } catch (nlohmann::json::exception & e) {
         warn("cannot parse flake registry '%s': %s", path, e.what());
@@ -187,7 +187,7 @@ restart:
 
     n++;
     if (n > 100)
-        throw Error("cycle detected in flake registry for '%s'", input.to_string());
+        throw UnstructuredError("cycle detected in flake registry for '%s'", input.to_string());
 
     for (auto & registry : getRegistries(settings, store)) {
         if (useRegistries == UseRegistries::Limited
@@ -216,7 +216,7 @@ restart:
     }
 
     if (!input.isDirect())
-        throw Error("cannot find flake '%s' in the flake registries", input.to_string());
+        throw UnstructuredError("cannot find flake '%s' in the flake registries", input.to_string());
 
     debug("looked up '%s' -> '%s'", _input.to_string(), input.to_string());
 

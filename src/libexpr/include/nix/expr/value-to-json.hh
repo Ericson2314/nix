@@ -22,6 +22,6 @@ void printValueAsJSON(
     NixStringContext & context,
     bool copyToStore = true);
 
-MakeError(JSONSerializationError, Error);
+MakeError(JSONSerializationError, UnstructuredError);
 
 } // namespace nix

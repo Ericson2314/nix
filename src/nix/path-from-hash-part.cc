@@ -32,7 +32,7 @@ struct CmdPathFromHashPart : StoreCommand
         if (auto storePath = store->queryPathFromHashPart(hashPart))
             logger->cout(store->printStorePath(*storePath));
         else
-            throw Error("there is no store path corresponding to '%s'", hashPart);
+            throw UnstructuredError("there is no store path corresponding to '%s'", hashPart);
     }
 };
 

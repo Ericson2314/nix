@@ -94,11 +94,11 @@ querySubstitutablePathInfosAsync(Store & store, const StorePathCAMap & paths, Su
         co_return;
 
     co_await forEachAsync(paths, [&store, &infos](auto path) -> asio::awaitable<void> {
-        std::optional<Error> lastStoresException = std::nullopt;
+        std::exception_ptr lastStoresException;
         for (auto & sub : getDefaultSubstituters()) {
-            if (lastStoresException.has_value()) {
-                logError(lastStoresException->info());
-                lastStoresException.reset();
+            if (lastStoresException) {
+                logExError(lastStoresException);
+                lastStoresException = nullptr;
             }
 
             auto subPath(path.first);
@@ -144,14 +144,14 @@ querySubstitutablePathInfosAsync(Store & store, const StorePathCAMap & paths, Su
                 break; /* We are done. */
             } catch (InvalidPath &) {
             } catch (Error & e) {
-                lastStoresException = std::make_optional(std::move(e));
+                lastStoresException = std::current_exception();
             }
         }
-        if (lastStoresException.has_value()) {
+        if (lastStoresException) {
             if (!settings.getWorkerSettings().tryFallback) {
-                throw std::move(*lastStoresException);
+                std::rethrow_exception(lastStoresException);
             } else
-                logError(lastStoresException->info());
+                logExError(lastStoresException);
         }
     });
 }
@@ -372,7 +372,7 @@ OutputPathMap resolveDerivedPath(Store & store, const DerivedPath::Built & bfd, 
                 for (auto & output : names) {
                     auto * pOutputPathOpt = get(outputsOpt_, output);
                     if (!pOutputPathOpt)
-                        throw Error(
+                        throw UnstructuredError(
                             "the derivation '%s' doesn't have an output named '%s'",
                             bfd.drvPath->to_string(store),
                             output);

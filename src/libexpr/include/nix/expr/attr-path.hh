@@ -8,8 +8,8 @@
 
 namespace nix {
 
-MakeError(AttrPathNotFound, Error);
-MakeError(NoPositionInfo, Error);
+MakeError(AttrPathNotFound, UnstructuredError);
+MakeError(NoPositionInfo, UnstructuredError);
 
 std::pair<Value *, PosIdx>
 findAlongAttrPath(EvalState & state, const std::string & attrPath, const Bindings & autoArgs, Value & vIn);

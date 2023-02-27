@@ -8,7 +8,7 @@ static void builtinUnpackChannel(const BuiltinBuilderContext & ctx)
     auto getAttr = [&](const std::string & name) -> const std::string & {
         auto i = ctx.drv.env.find(name);
         if (i == ctx.drv.env.end())
-            throw Error("attribute '%s' missing", name);
+            throw UnstructuredError("attribute '%s' missing", name);
         return i->second;
     };
 
@@ -17,7 +17,7 @@ static void builtinUnpackChannel(const BuiltinBuilderContext & ctx)
     auto & src = getAttr("src");
 
     if (std::filesystem::path{channelName}.filename().string() != channelName) {
-        throw Error("channelName is not allowed to contain filesystem separators, got %1%", channelName);
+        throw UnstructuredError("channelName is not allowed to contain filesystem separators, got %1%", channelName);
     }
 
     createDirs(out);
@@ -28,12 +28,12 @@ static void builtinUnpackChannel(const BuiltinBuilderContext & ctx)
     std::string fileName;
     auto entries = DirectoryIterator{out};
     if (entries == DirectoryIterator{})
-        throw Error("channel tarball '%s' is empty", src);
+        throw UnstructuredError("channel tarball '%s' is empty", src);
     fileName = entries->path().string();
     fileCount = std::distance(entries.begin(), entries.end());
 
     if (fileCount != 1)
-        throw Error("channel tarball '%s' contains more than one file", src);
+        throw UnstructuredError("channel tarball '%s' contains more than one file", src);
 
     auto target = out / channelName;
     try {

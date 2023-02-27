@@ -134,7 +134,7 @@ public:
     bool number_unsigned(number_unsigned_t val_) override
     {
         if (val_ > std::numeric_limits<NixInt::Inner>::max()) {
-            throw Error("unsigned json number %1% outside of Nix integer range", val_);
+            throw UnstructuredError("unsigned json number %1% outside of Nix integer range", val_);
         }
         NixInt::Inner val = val_;
         rs->value(state).mkInt(val);

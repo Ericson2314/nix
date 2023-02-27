@@ -18,7 +18,7 @@ LogFormat parseLogFormat(const std::string & logFormatStr)
         return LogFormat::bar;
     else if (logFormatStr == "bar-with-logs")
         return LogFormat::barWithLogs;
-    throw Error("option 'log-format' has an invalid value '%s'", logFormatStr);
+    throw UnstructuredError("option 'log-format' has an invalid value '%s'", logFormatStr);
 }
 
 std::unique_ptr<Logger> makeDefaultLogger()

@@ -18,7 +18,7 @@ StructuredAttrs StructuredAttrs::parse(std::string_view encoded)
             .verbatim = std::string{encoded},
         };
     } catch (std::exception & e) {
-        throw Error("cannot process %s attribute: %s", envVarName, e.what());
+        throw UnstructuredError("cannot process %s attribute: %s", envVarName, e.what());
     }
 }
 
@@ -61,7 +61,7 @@ std::pair<std::string_view, std::string> StructuredAttrs::unparse() const
 void StructuredAttrs::checkKeyNotInUse(const StringPairs & env)
 {
     if (env.count(envVarName))
-        throw Error(
+        throw UnstructuredError(
             "Cannot have an environment variable named '__json'. This key is reserved for encoding structured attrs");
 }
 

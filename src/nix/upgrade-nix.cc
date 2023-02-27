@@ -123,7 +123,7 @@ struct CmdUpgradeNix : MixDryRun, StoreCommand
             auto program = store->printStorePath(storePath) + "/bin/nix-env";
             auto s = runProgram(program, false, {OS_STR("--version")});
             if (s.find("Nix") == std::string::npos)
-                throw Error("could not verify that '%s' works", program);
+                throw UnstructuredError("could not verify that '%s' works", program);
         }
 
         logger->stop();
@@ -155,13 +155,13 @@ struct CmdUpgradeNix : MixDryRun, StoreCommand
     {
         auto whereOpt = ExecutablePath::load().findName(OS_STR("nix-env"));
         if (!whereOpt)
-            throw Error("couldn't figure out how Nix is installed, so I can't upgrade it");
+            throw UnstructuredError("couldn't figure out how Nix is installed, so I can't upgrade it");
         const auto & where = whereOpt->parent_path();
 
         printInfo("found Nix in %s", PathFmt(where));
 
         if (hasPrefix(where.string(), "/run/current-system"))
-            throw Error("Nix on NixOS must be upgraded via 'nixos-rebuild'");
+            throw UnstructuredError("Nix on NixOS must be upgraded via 'nixos-rebuild'");
 
         auto profileDir = where.parent_path();
 
@@ -174,17 +174,17 @@ struct CmdUpgradeNix : MixDryRun, StoreCommand
         printInfo("found profile %s", PathFmt(resolved));
 
         if (std::filesystem::exists(profileDir / "manifest.json"))
-            throw Error(
+            throw UnstructuredError(
                 "directory %s is managed by 'nix profile' and currently cannot be upgraded by 'nix upgrade-nix'",
                 PathFmt(profileDir));
 
         if (!std::filesystem::exists(profileDir / "manifest.nix"))
-            throw Error("directory %s does not appear to be part of a Nix profile", PathFmt(profileDir));
+            throw UnstructuredError("directory %s does not appear to be part of a Nix profile", PathFmt(profileDir));
 
         auto userEnv = store->followLinksToStorePath(profileDir.string());
 
         if (!store->isValidPath(userEnv))
-            throw Error("directory %s is not in the Nix store", PathFmt(profileDir));
+            throw UnstructuredError("directory %s is not in the Nix store", PathFmt(profileDir));
 
         return profileDir;
     }

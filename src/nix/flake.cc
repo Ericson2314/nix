@@ -102,7 +102,7 @@ public:
                             "Invalid flake input '%s'. To update a specific flake, use 'nix flake update --flake %s' instead.",
                             inputToUpdate,
                             inputToUpdate);
-                        throw e;
+                        throw;
                     }
                     if (lockFlags.inputUpdates.contains(*inputAttrPath))
                         warn(
@@ -371,12 +371,12 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
         bool hasErrors = false;
         auto reportError = [&](const Error & e) {
             try {
-                throw e;
+                e.throwClone();
             } catch (Interrupted & e) {
                 throw;
             } catch (Error & e) {
                 if (settings.getWorkerSettings().keepGoing) {
-                    logError(e.info());
+                    logExError(e);
                     hasErrors = true;
                 } else
                     throw;
@@ -397,7 +397,7 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
         auto checkSystemName = [&](std::string_view system, const PosIdx pos) {
             // FIXME: what's the format of "system"?
             if (system.find('-') == std::string::npos)
-                reportError(Error("'%s' is not a valid system type, at %s", system, resolve(pos)));
+                reportError(UnstructuredError("'%s' is not a valid system type, at %s", system, resolve(pos)));
         };
 
         auto checkSystemType = [&](std::string_view system, const PosIdx pos) {
@@ -415,7 +415,7 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                 Activity act(*logger, lvlInfo, actUnknown, fmt("checking derivation %s", attrPath));
                 auto packageInfo = getDerivation(*state, v, false);
                 if (!packageInfo)
-                    throw Error("flake attribute '%s' is not a derivation", attrPath);
+                    throw UnstructuredError("flake attribute '%s' is not a derivation", attrPath);
                 else {
                     // FIXME: check meta attributes
                     auto storePath = packageInfo->queryDrvPath();
@@ -441,7 +441,7 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                 if (auto attr = v.attrs()->get(state->symbols.create("type")))
                     state->forceStringNoCtx(*attr->value, attr->pos, "");
                 else
-                    throw Error("app '%s' lacks attribute 'type'", attrPath);
+                    throw UnstructuredError("app '%s' lacks attribute 'type'", attrPath);
 
                 if (auto attr = v.attrs()->get(state->symbols.create("program"))) {
                     if (attr->name == state->symbols.create("program")) {
@@ -449,25 +449,21 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                         state->forceString(*attr->value, context, attr->pos, "");
                     }
                 } else
-                    throw Error("app '%s' lacks attribute 'program'", attrPath);
+                    throw UnstructuredError("app '%s' lacks attribute 'program'", attrPath);
 
                 if (auto attr = v.attrs()->get(state->symbols.create("meta"))) {
                     state->forceAttrs(*attr->value, attr->pos, "");
                     if (auto dAttr = attr->value->attrs()->get(state->symbols.create("description")))
                         state->forceStringNoCtx(*dAttr->value, dAttr->pos, "");
                     else
-                        logWarning({
-                            .msg = HintFmt("app '%s' lacks attribute 'meta.description'", attrPath),
-                        });
+                        logWarning({}, HintFmt("app '%s' lacks attribute 'meta.description'", attrPath));
                 } else
-                    logWarning({
-                        .msg = HintFmt("app '%s' lacks attribute 'meta'", attrPath),
-                    });
+                    logWarning({}, HintFmt("app '%s' lacks attribute 'meta'", attrPath));
 
                 for (auto & attr : *v.attrs()) {
                     std::string_view name(state->symbols[attr.name]);
                     if (name != "type" && name != "program" && name != "meta")
-                        throw Error("app '%s' has unsupported attribute '%s'", attrPath, name);
+                        throw UnstructuredError("app '%s' has unsupported attribute '%s'", attrPath, name);
                 }
             } catch (Error & e) {
                 e.addTrace(resolve(pos), HintFmt("while checking the app definition '%s'", attrPath));
@@ -480,10 +476,10 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                 Activity act(*logger, lvlInfo, actUnknown, fmt("checking overlay '%s'", attrPath));
                 state->forceValue(v, pos);
                 if (!v.isLambda()) {
-                    throw Error("overlay is not a function, but %s instead", showType(v));
+                    throw UnstructuredError("overlay is not a function, but %s instead", showType(v));
                 }
                 if (v.lambda().fun->getFormals() || !argHasName(v.lambda().fun->arg, "final"))
-                    throw Error("overlay does not take an argument named 'final'");
+                    throw UnstructuredError("overlay does not take an argument named 'final'");
                 // FIXME: if we have a 'nixpkgs' input, use it to
                 // evaluate the overlay.
             } catch (Error & e) {
@@ -510,7 +506,7 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                 state->forceAttrs(v, pos, "");
 
                 if (state->isDerivation(v))
-                    throw Error("jobset should not be a derivation at top-level");
+                    throw UnstructuredError("jobset should not be a derivation at top-level");
 
                 for (auto & attr : *v.attrs()) {
                     state->forceAttrs(*attr.value, attr.pos, "");
@@ -535,7 +531,7 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                 auto vToplevel = findAlongAttrPath(*state, "config.system.build.toplevel", bindings, v).first;
                 state->forceValue(*vToplevel, pos);
                 if (!state->isDerivation(*vToplevel))
-                    throw Error("attribute 'config.system.build.toplevel' is not a derivation");
+                    throw UnstructuredError("attribute 'config.system.build.toplevel' is not a derivation");
             } catch (Error & e) {
                 e.addTrace(resolve(pos), HintFmt("while checking the NixOS configuration '%s'", attrPath));
                 reportError(e);
@@ -553,21 +549,21 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                         NixStringContext context;
                         auto path = state->coerceToPath(attr->pos, *attr->value, context, "");
                         if (!path.pathExists())
-                            throw Error("template '%s' refers to a non-existent path '%s'", attrPath, path);
+                            throw UnstructuredError("template '%s' refers to a non-existent path '%s'", attrPath, path);
                         // TODO: recursively check the flake in 'path'.
                     }
                 } else
-                    throw Error("template '%s' lacks attribute 'path'", attrPath);
+                    throw UnstructuredError("template '%s' lacks attribute 'path'", attrPath);
 
                 if (auto attr = v.attrs()->get(state->symbols.create("description")))
                     state->forceStringNoCtx(*attr->value, attr->pos, "");
                 else
-                    throw Error("template '%s' lacks attribute 'description'", attrPath);
+                    throw UnstructuredError("template '%s' lacks attribute 'description'", attrPath);
 
                 for (auto & attr : *v.attrs()) {
                     std::string_view name(state->symbols[attr.name]);
                     if (name != "path" && name != "description" && name != "welcomeText")
-                        throw Error("template '%s' has unsupported attribute '%s'", attrPath, name);
+                        throw UnstructuredError("template '%s' has unsupported attribute '%s'", attrPath, name);
                 }
             } catch (Error & e) {
                 e.addTrace(resolve(pos), HintFmt("while checking the template '%s'", attrPath));
@@ -580,7 +576,7 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                 Activity act(*logger, lvlInfo, actUnknown, fmt("checking bundler '%s'", attrPath));
                 state->forceValue(v, pos);
                 if (!v.isLambda())
-                    throw Error("bundler must be a function");
+                    throw UnstructuredError("bundler must be a function");
                 // TODO: check types of inputs/outputs?
             } catch (Error & e) {
                 e.addTrace(resolve(pos), HintFmt("while checking the template '%s'", attrPath));
@@ -626,7 +622,8 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                                         *attr2.value,
                                         attr2.pos);
                                     if (!drvPath) {
-                                        reportError(Error("'%s.%s.drvPath' does not exist", name, attr_name));
+                                        reportError(
+                                            UnstructuredError("'%s.%s.drvPath' does not exist", name, attr_name));
                                     } else if (attr_name == settings.thisSystem.get()) {
                                         auto path = DerivedPath::Built{
                                             .drvPath = makeConstantStorePathRef(*drvPath),
@@ -835,7 +832,7 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                     auto it = attrPathsByDrv.find(result.path);
                     if (it != attrPathsByDrv.end() && !it->second.empty()) {
                         for (auto & attrPath : it->second) {
-                            reportError(Error(
+                            reportError(UnstructuredError(
                                 "failed to build attribute '%s', build of '%s' failed: %s",
                                 attrPath.to_string(*state),
                                 result.path.to_string(*store),
@@ -843,14 +840,14 @@ struct CmdFlakeCheck : FlakeCommand, MixPrintOutPaths, MixOutLinkBase
                         }
                     } else {
                         // Derivation has no attribute path (e.g., a build dependency)
-                        reportError(
-                            Error("build of '%s' failed: %s", result.path.to_string(*store), failure->message()));
+                        reportError(UnstructuredError(
+                            "build of '%s' failed: %s", result.path.to_string(*store), failure->message()));
                     }
                 }
             }
         }
         if (hasErrors)
-            throw Error("some errors were encountered during the evaluation");
+            throw UnstructuredError("some errors were encountered during the evaluation");
 
         logger->log(lvlInfo, ANSI_GREEN "all checks passed!" ANSI_NORMAL);
 
@@ -973,7 +970,7 @@ struct CmdFlakeInitCommon : virtual Args, EvalCommand
                     } else
                         createSymlink(target, to2);
                 } else
-                    throw Error(
+                    throw UnstructuredError(
                         "path '%s' needs to be a symlink, file, or directory but instead is a %s",
                         from2,
                         st.typeString());
@@ -1002,7 +999,7 @@ struct CmdFlakeInitCommon : virtual Args, EvalCommand
         }
 
         if (!conflictedFiles.empty())
-            throw Error("encountered %d conflicts - see above", conflictedFiles.size());
+            throw UnstructuredError("encountered %d conflicts - see above", conflictedFiles.size());
     }
 };
 
@@ -1076,7 +1073,7 @@ struct CmdFlakeClone : FlakeCommand
     void run(nix::ref<nix::Store> store) override
     {
         if (destDir.empty())
-            throw Error("missing flag '--dest'");
+            throw UnstructuredError("missing flag '--dest'");
 
         getFlakeRef().resolve(fetchSettings, *store).input.clone(fetchSettings, *store, destDir);
     }
@@ -1552,7 +1549,7 @@ struct CmdFlakePrefetch : FlakeCommand, MixJSON
             if (auto store2 = store.dynamic_pointer_cast<LocalFSStore>())
                 createOutLinks(*outLink, {BuiltPath::Opaque{storePath}}, *store2);
             else
-                throw Error("'--out-link' is not supported for this Nix store");
+                throw UnstructuredError("'--out-link' is not supported for this Nix store");
         }
     }
 };

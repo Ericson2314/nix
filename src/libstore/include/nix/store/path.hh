@@ -11,7 +11,7 @@ namespace nix {
 
 struct Hash;
 
-MakeError(BadStorePath, Error);
+MakeError(BadStorePath, UnstructuredError);
 MakeError(BadStorePathName, BadStorePath);
 
 /**

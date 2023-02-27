@@ -5,7 +5,7 @@
 
 namespace nix {
 
-MakeError(SubstituteGone, Error);
+MakeError(SubstituteGone, UnstructuredError);
 
 enum SubstituteFlag : bool { NoSubstitute = false, Substitute = true };
 

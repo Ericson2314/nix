@@ -598,7 +598,7 @@ Sink & operator<<(Sink & sink, std::string_view s);
 Sink & operator<<(Sink & sink, const Strings & s);
 Sink & operator<<(Sink & sink, const StringSet & s);
 
-MakeError(SerialisationError, Error);
+MakeError(SerialisationError, UnstructuredError);
 
 template<typename T>
 T readNum(Source & source)
@@ -650,7 +650,7 @@ Source & operator>>(Source & in, bool & b)
     return in;
 }
 
-Error readError(Source & source);
+UnstructuredError readError(Source & source);
 
 /**
  * A source that reads a distinct format of concatenated chunks back into its

@@ -177,7 +177,7 @@ public:
     StoreReference getReference() const override;
 };
 
-MakeError(PathInUse, Error);
+MakeError(PathInUse, UnstructuredError);
 
 class LocalStore : public virtual IndirectRootStore, public virtual GcStore
 {

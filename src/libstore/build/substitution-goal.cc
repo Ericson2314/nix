@@ -40,19 +40,19 @@ Goal::Co PathSubstitutionGoal::init()
     }
 
     if (worker.store.config.getReadOnly())
-        throw Error(
+        throw UnstructuredError(
             "cannot substitute path '%s' - no write access to the Nix store", worker.store.printStorePath(storePath));
 
     auto subs = worker.getSubstituters();
 
     bool substituterFailed = false;
-    std::optional<Error> lastStoresException = std::nullopt;
+    std::exception_ptr lastStoresException;
 
     for (const auto & sub : subs) {
         trace("trying next substituter");
-        if (lastStoresException.has_value()) {
-            logError(lastStoresException->info());
-            lastStoresException.reset();
+        if (lastStoresException) {
+            logExError(lastStoresException);
+            lastStoresException = nullptr;
         }
 
         cleanup();
@@ -79,7 +79,7 @@ Goal::Co PathSubstitutionGoal::init()
         } catch (InvalidPath &) {
             continue;
         } catch (Error & e) {
-            lastStoresException = std::make_optional(std::move(e));
+            lastStoresException = std::current_exception();
             continue;
         }
 
@@ -155,11 +155,11 @@ Goal::Co PathSubstitutionGoal::init()
         worker.failedSubstitutions++;
         worker.updateProgress();
     }
-    if (lastStoresException.has_value()) {
+    if (lastStoresException) {
         if (!worker.settings.tryFallback) {
-            throw std::move(*lastStoresException);
+            std::rethrow_exception(lastStoresException);
         } else
-            logError(lastStoresException->info());
+            logExError(lastStoresException);
     }
 
     /* Hack: don't indicate failure if there were no substituters.
@@ -184,7 +184,7 @@ PathSubstitutionGoal::tryToRun(StorePath subPath, nix::ref<Store> sub, std::shar
         /* ignore self-references */
         if (i != storePath) {
             if (!worker.store.isValidPath(i)) {
-                throw Error(
+                throw UnstructuredError(
                     "reference '%s' of path '%s' is not a valid path",
                     worker.store.printStorePath(i),
                     worker.store.printStorePath(storePath));
@@ -272,7 +272,7 @@ PathSubstitutionGoal::tryToRun(StorePath subPath, nix::ref<Store> sub, std::shar
         } catch (SubstituteGone & sg) {
             /* Missing NARs are expected when they've been garbage collected.
                This is not a failure, so log as a warning instead of an error. */
-            logWarning({.msg = sg.info().msg});
+            logExWarning(sg);
             co_return SubstitutionResult::SubstituteGone;
         } catch (...) {
             printError(e.what());

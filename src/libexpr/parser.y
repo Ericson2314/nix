@@ -452,7 +452,7 @@ path_start
   | HPATH {
     std::string_view literal($1.p, $1.l);
     if (state->settings.pureEval) {
-        throw Error(
+        throw UnstructuredError(
             "the path '%s' can not be resolved in pure mode",
             literal
         );

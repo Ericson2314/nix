@@ -244,14 +244,14 @@ struct AbsolutePath
         : _path(std::move(p))
     {
         if (!_path.is_absolute())
-            throw Error("not an absolute path: %s", PathFmt(_path));
+            throw UnstructuredError("not an absolute path: %s", PathFmt(_path));
     }
 
     AbsolutePath(const char * s)
         : _path(s)
     {
         if (!_path.is_absolute())
-            throw Error("not an absolute path: %s", PathFmt(_path));
+            throw UnstructuredError("not an absolute path: %s", PathFmt(_path));
     }
 
 #ifdef _WIN32
@@ -259,7 +259,7 @@ struct AbsolutePath
         : _path(s)
     {
         if (!_path.is_absolute())
-            throw Error("not an absolute path: %s", PathFmt(_path));
+            throw UnstructuredError("not an absolute path: %s", PathFmt(_path));
     }
 #endif
 

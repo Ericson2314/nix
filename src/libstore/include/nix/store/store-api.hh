@@ -26,10 +26,10 @@
 
 namespace nix {
 
-MakeError(InvalidPath, Error);
-MakeError(Unsupported, Error);
+MakeError(InvalidPath, UnstructuredError);
+MakeError(Unsupported, UnstructuredError);
 
-MakeError(InvalidStoreReference, Error);
+MakeError(InvalidStoreReference, UnstructuredError);
 
 struct UnkeyedRealisation;
 struct Realisation;

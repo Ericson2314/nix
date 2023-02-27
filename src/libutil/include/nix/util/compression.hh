@@ -31,6 +31,6 @@ std::string compress(CompressionAlgo method, Source & in, const bool parallel = 
 ref<CompressionSink>
 makeCompressionSink(CompressionAlgo method, Sink & nextSink, const bool parallel = false, int level = -1);
 
-MakeError(CompressionError, Error);
+MakeError(CompressionError, UnstructuredError);
 
 } // namespace nix

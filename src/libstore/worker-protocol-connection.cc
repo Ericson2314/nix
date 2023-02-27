@@ -29,7 +29,7 @@ static auto readFields(Source & from)
             fields.push_back(readString(from));
             break;
         default:
-            throw Error("got unsupported field type %x from Nix daemon", (int) type);
+            throw UnstructuredError("got unsupported field type %x from Nix daemon", (int) type);
         }
     }
     return fields;
@@ -53,13 +53,13 @@ WorkerProto::BasicClientConnection::processStderrReturn(Sink * sink, Source * so
         if (msg == STDERR_WRITE) {
             auto s = readString(from);
             if (!sink)
-                throw Error("no sink");
+                throw UnstructuredError("no sink");
             (*sink)(s);
         }
 
         else if (msg == STDERR_READ) {
             if (!source)
-                throw Error("no source");
+                throw UnstructuredError("no source");
             size_t len = readNum<size_t>(from);
             auto buf = std::make_unique<char[]>(len);
             writeString({(const char *) buf.get(), source->read(buf.get(), len)}, to);
@@ -72,7 +72,7 @@ WorkerProto::BasicClientConnection::processStderrReturn(Sink * sink, Source * so
             } else {
                 auto error = readString(from);
                 unsigned int status = readInt(from);
-                ex = std::make_exception_ptr(Error(status, error));
+                ex = std::make_exception_ptr(UnstructuredError(status, error));
             }
             break;
         }
@@ -108,7 +108,7 @@ WorkerProto::BasicClientConnection::processStderrReturn(Sink * sink, Source * so
         }
 
         else
-            throw Error("got unknown message type %x from Nix daemon", msg);
+            throw UnstructuredError("got unknown message type %x from Nix daemon", msg);
     }
 
     if (!ex) {
@@ -129,7 +129,7 @@ WorkerProto::BasicClientConnection::processStderrReturn(Sink * sink, Source * so
                 auto m = e.msg();
                 if (m.find("parsing derivation") != std::string::npos && m.find("expected string") != std::string::npos
                     && m.find("Derive([") != std::string::npos)
-                    return std::make_exception_ptr(Error(
+                    return std::make_exception_ptr(UnstructuredError(
                         "%s, this might be because the daemon is too old to understand dependencies on dynamic derivations. Check to see if the raw derivation is in the form '%s'",
                         std::move(m),
                         "Drv WithVersion(..)"));
@@ -167,13 +167,13 @@ WorkerProto::Version WorkerProto::BasicClientConnection::handshake(
 
     unsigned int magic = readInt(from);
     if (magic != WORKER_MAGIC_2)
-        throw Error("nix-daemon protocol mismatch from");
+        throw UnstructuredError("nix-daemon protocol mismatch from");
     auto daemonVersion = WorkerProto::Version::Number::fromWire(readInt(from));
 
     if (daemonVersion.major != WorkerProto::latest.number.major)
-        throw Error("Nix daemon protocol version not supported");
+        throw UnstructuredError("Nix daemon protocol version not supported");
     if (daemonVersion < WorkerProto::Version::Number{1, 10})
-        throw Error("the Nix daemon version is too old");
+        throw UnstructuredError("the Nix daemon version is too old");
 
     auto protoVersionNumber = std::min(daemonVersion, localVersion.number);
 
@@ -196,7 +196,7 @@ WorkerProto::Version WorkerProto::BasicServerConnection::handshake(
 {
     unsigned int magic = readInt(from);
     if (magic != WORKER_MAGIC_1)
-        throw Error("protocol mismatch");
+        throw UnstructuredError("protocol mismatch");
     to << WORKER_MAGIC_2 << localVersion.number.toWire();
     to.flush();
     auto clientVersion = WorkerProto::Version::Number::fromWire(readInt(from));

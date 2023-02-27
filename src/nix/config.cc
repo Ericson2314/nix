@@ -59,7 +59,7 @@ struct CmdConfigShow : Command, MixJSON
             auto setting = settings.find(*name);
 
             if (setting == settings.end()) {
-                throw Error("could not find setting '%1%'", *name);
+                throw UnstructuredError("could not find setting '%1%'", *name);
             } else {
                 const auto & value = setting->second.value;
                 logger->cout("%s", value);

@@ -18,6 +18,8 @@ void BaseError::anchor() {}
 
 void Error::anchor() {}
 
+void UnstructuredError::anchor() {}
+
 void UsageError::anchor() {}
 
 void UnimplementedError::anchor() {}
@@ -34,14 +36,14 @@ void BaseError::addTrace(std::shared_ptr<const Pos> && e, HintFmt hint, TracePri
 void throwExceptionSelfCheck()
 {
     // This is meant to be caught in initLibUtil()
-    throw Error(
+    throw UnstructuredError(
         "C++ exception handling is broken. This would appear to be a problem with the way Nix was compiled and/or linked and/or loaded.");
 }
 
 void BaseError::recalcWhat() const
 {
     std::ostringstream oss;
-    showErrorInfo(oss, err, loggerSettings.showTrace);
+    showErrorInfo(oss, err, renderMessage(), loggerSettings.showTrace);
     what_ = oss.str();
 }
 
@@ -226,7 +228,7 @@ void printSkippedTracesMaybe(
     skippedTraces.clear();
 }
 
-std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool showTrace)
+std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, fun<void(std::ostream &)> msg, bool showTrace)
 {
     std::string prefix;
     switch (einfo.level) {
@@ -421,7 +423,9 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
         oss << "\n" << prefix;
     }
 
-    oss << einfo.msg << "\n";
+    msg(oss);
+
+    oss << "\n";
 
     printPosMaybe(oss, "", einfo.pos);
 
@@ -437,6 +441,11 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
     }
 
     return out;
+}
+
+std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, const HintFmt & msg, bool showTrace)
+{
+    return showErrorInfo(out, einfo, [&](std::ostream & oss) { oss << msg; }, showTrace);
 }
 
 /** Write to stderr in a robust and minimal way, considering that the process
@@ -493,7 +502,7 @@ int handleExceptions(const std::string & programName, fun<void()> body)
 
     auto doLog = [&](BaseError & e) {
         try {
-            logError(e.info());
+            logExError(e);
         } catch (...) {
             printError(ANSI_RED "error:" ANSI_NORMAL " Exception while printing an exception.");
         }

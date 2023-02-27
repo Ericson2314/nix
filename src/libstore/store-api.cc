@@ -138,7 +138,7 @@ bool StoreDirConfig::isInStore(std::string_view path) const
 std::pair<StorePath, CanonPath> StoreDirConfig::toStorePath(std::string_view path) const
 {
     if (!isInStore(path))
-        throw Error("path '%1%' is not in the Nix store", path);
+        throw UnstructuredError("path '%1%' is not in the Nix store", path);
     auto slash = path.find('/', storeDir.size() + 1);
     if (slash == std::string::npos)
         return {parseStorePath(path), CanonPath::root};
@@ -166,7 +166,7 @@ std::filesystem::path Store::followLinksToStore(std::string_view _path) const
             break;
 
         if (++followCount >= maxFollow)
-            throw Error("too many symbolic links encountered while resolving '%s'", _path);
+            throw UnstructuredError("too many symbolic links encountered while resolving '%s'", _path);
 
         auto target = readLink(path);
         auto parentPath = path.parent_path();
@@ -276,7 +276,7 @@ void Store::addMultipleToStore(PathsSource && pathsToCopy, Activity & act, Repai
                 } catch (Error & e) {
                     nrFailed++;
                     if (!settings.getWorkerSettings().keepGoing)
-                        throw e;
+                        throw;
                     printMsg(lvlError, "could not copy %s: %s", printStorePath(path), e.what());
                     showProgress();
                     return;
@@ -359,7 +359,7 @@ ValidPathInfo Store::addToStoreSlow(
                                                            : caHashSink.finish().hash;
 
     if (expectedCAHash && expectedCAHash != hash)
-        throw Error("hash mismatch for '%s'", srcPath);
+        throw UnstructuredError("hash mismatch for '%s'", srcPath);
 
     auto info = ValidPathInfo::makeFromCA(
         *this,
@@ -459,7 +459,7 @@ Store::queryStaticPartialDerivationOutput(const StorePath & path, const std::str
     auto outputs = outputsAndOptPaths(drv, *this);
     auto it = outputs.find(outputName);
     if (it == outputs.end())
-        throw Error("derivation '%s' does not have an output named '%s'", printStorePath(path), outputName);
+        throw UnstructuredError("derivation '%s' does not have an output named '%s'", printStorePath(path), outputName);
     return it->second.second;
 }
 
@@ -756,7 +756,7 @@ void Store::substitutePaths(const StorePathSet & paths)
                 subs.emplace_back(DerivedPath::Opaque{p});
             getBuilder()->buildPaths(subs, bmNormal);
         } catch (Error & e) {
-            logWarning(e.info());
+            logExWarning(e);
         }
 }
 
@@ -1165,7 +1165,7 @@ decodeValidPathInfo(const Store & store, std::istream & str, std::optional<HashR
         getline(str, s);
         auto narSize = string2Int<uint64_t>(s);
         if (!narSize)
-            throw Error("number expected");
+            throw UnstructuredError("number expected");
         hashGiven = {narHash, *narSize};
     }
     ValidPathInfo info(store.parseStorePath(path), {store, hashGiven->hash});
@@ -1178,13 +1178,13 @@ decodeValidPathInfo(const Store & store, std::istream & str, std::optional<HashR
     getline(str, s);
     auto n = string2Int<int>(s);
     if (!n)
-        throw Error("number expected");
+        throw UnstructuredError("number expected");
     while ((*n)--) {
         getline(str, s);
         info.references.insert(store.parseStorePath(s));
     }
     if (!str || str.eof())
-        throw Error("missing input");
+        throw UnstructuredError("missing input");
     return std::optional<ValidPathInfo>(std::move(info));
 }
 
@@ -1206,7 +1206,7 @@ static Derivation readDerivationCommon(Store & store, const StorePath & drvPath,
 
         return derivation::parse(store, std::move(contents), Derivation::nameFromPath(drvPath));
     } catch (FormatError & e) {
-        throw Error("error parsing derivation '%s': %s", store.printStorePath(drvPath), e.message());
+        throw UnstructuredError("error parsing derivation '%s': %s", store.printStorePath(drvPath), e.message());
     }
 }
 

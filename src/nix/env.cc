@@ -90,7 +90,7 @@ struct CmdShell : InstallablesCommand, MixEnvironment
 
             auto binDir = state->storeFS->resolveSymlinks(CanonPath(store->printStorePath(path)) / "bin");
             if (!store->isInStore(binDir.abs()))
-                throw Error("path '%s' is not in the Nix store", binDir);
+                throw UnstructuredError("path '%s' is not in the Nix store", binDir);
 
             pathAdditions.push_back(binDir.abs());
 

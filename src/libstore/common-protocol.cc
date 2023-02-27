@@ -116,7 +116,7 @@ CommonProto::Serialise<BuildResultStatus>::read(const StoreDirConfig & store, Co
     auto rawStatus = readNum<uint8_t>(conn.from);
 
     if (rawStatus >= std::size(buildResultStatusTable))
-        throw Error("Invalid BuildResult status %d from remote", rawStatus);
+        throw UnstructuredError("Invalid BuildResult status %d from remote", rawStatus);
 
     return buildResultStatusTable[rawStatus];
 }

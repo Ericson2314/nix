@@ -82,7 +82,7 @@ DerivedPathsWithInfo InstallableFlake::toDerivedPaths()
                 v, noPos, fmt("while evaluating the flake output attribute '%s'", attrPath))) {
             return {*derivedPathWithInfo};
         } else {
-            throw Error(
+            throw UnstructuredError(
                 "expected flake output attribute '%s' to be a derivation or path but found %s: %s",
                 attrPath,
                 showType(v),
@@ -174,7 +174,8 @@ std::vector<ref<eval_cache::AttrCursor>> InstallableFlake::getCursors(EvalState 
     }
 
     if (res.size() == 0)
-        throw Error(suggestions, "flake '%s' does not provide attribute %s", flakeRef, showAttrPaths(attrPaths));
+        throw UnstructuredError(
+            suggestions, "flake '%s' does not provide attribute %s", flakeRef, showAttrPaths(attrPaths));
 
     return res;
 }

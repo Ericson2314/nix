@@ -75,7 +75,7 @@ struct ServeUnixSocketOptions
 #endif
 };
 
-MakeError(AbortServeSocket, BaseError);
+MakeError(AbortServeSocket, Unstructured<BaseError>);
 
 /**
  * Run a server loop that accepts connections and calls the handler for each.

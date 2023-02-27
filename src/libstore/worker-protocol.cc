@@ -81,7 +81,7 @@ BuildMode WorkerProto::Serialise<BuildMode>::read(const StoreDirConfig & store, 
     case 2:
         return bmCheck;
     default:
-        throw Error("Invalid build mode");
+        throw UnstructuredError("Invalid build mode");
     }
 }
 
@@ -117,7 +117,7 @@ GCAction WorkerProto::Serialise<GCAction>::read(const StoreDirConfig & store, Wo
     case 3:
         return gcDeleteSpecific;
     default:
-        throw Error("Invalid GC action");
+        throw UnstructuredError("Invalid GC action");
     }
 }
 
@@ -155,7 +155,7 @@ WorkerProto::Serialise<std::optional<TrustedFlag>>::read(const StoreDirConfig & 
     case 2:
         return {NotTrusted};
     default:
-        throw Error("Invalid trusted status from remote");
+        throw UnstructuredError("Invalid trusted status from remote");
     }
 }
 
@@ -188,7 +188,7 @@ std::optional<std::chrono::microseconds> WorkerProto::Serialise<std::optional<st
     case 1:
         return std::optional<std::chrono::microseconds>{std::chrono::microseconds(readNum<int64_t>(conn.from))};
     default:
-        throw Error("Invalid optional tag from remote");
+        throw UnstructuredError("Invalid optional tag from remote");
     }
 }
 
@@ -225,14 +225,14 @@ void WorkerProto::Serialise<DerivedPath>::write(
             overloaded{
                 [&](const StorePathWithOutputs & s) { conn.to << s.to_string(store); },
                 [&](const StorePath & drvPath) {
-                    throw Error(
+                    throw UnstructuredError(
                         "trying to request '%s', but daemon protocol %d.%d is too old (< 1.29) to request a derivation file",
                         store.printStorePath(drvPath),
                         conn.version.number.major,
                         conn.version.number.minor);
                 },
                 [&](std::monostate) {
-                    throw Error(
+                    throw UnstructuredError(
                         "wanted to build a derivation that is itself a build product, but protocols do not support that. Try upgrading the Nix on the other end of this connection");
                 },
             },
@@ -257,7 +257,7 @@ WorkerProto::Serialise<SingleDerivedPath>::read(const StoreDirConfig & store, Wo
         };
     }
     default:
-        throw Error("Invalid tag %d for single derived path", tag);
+        throw UnstructuredError("Invalid tag %d for single derived path", tag);
     }
 }
 
@@ -323,7 +323,7 @@ BuildResult WorkerProto::Serialise<BuildResult>::read(const StoreDirConfig & sto
         for (auto && [output, realisation] : WorkerProto::Serialise<StringMap>::read(store, conn)) {
             size_t n = output.find("!");
             if (n == output.npos)
-                throw Error("Invalid derivation output id %s", output);
+                throw UnstructuredError("Invalid derivation output id %s", output);
             success.builtOutputs.insert_or_assign(
                 output.substr(n + 1),
                 UnkeyedRealisation{
@@ -483,7 +483,7 @@ void WorkerProto::Serialise<WorkerProto::ClientHandshakeInfo>::write(
 UnkeyedRealisation WorkerProto::Serialise<UnkeyedRealisation>::read(const StoreDirConfig & store, ReadConn conn)
 {
     if (!conn.version.features.contains(WorkerProto::featureRealisationWithPath)) {
-        throw Error(
+        throw UnstructuredError(
             "the daemon is missing the '%s' protocol feature, needed to understand build trace",
             WorkerProto::featureRealisationWithPath);
     }
@@ -501,7 +501,7 @@ void WorkerProto::Serialise<UnkeyedRealisation>::write(
     const StoreDirConfig & store, WriteConn conn, const UnkeyedRealisation & info)
 {
     if (!conn.version.features.contains(WorkerProto::featureRealisationWithPath)) {
-        throw Error(
+        throw UnstructuredError(
             "the daemon is missing the '%s' protocol feature, needed to understand build trace",
             WorkerProto::featureRealisationWithPath);
     }
@@ -524,7 +524,7 @@ WorkerProto::Serialise<std::optional<UnkeyedRealisation>>::read(const StoreDirCo
         case 1:
             return WorkerProto::Serialise<UnkeyedRealisation>::read(store, conn);
         default:
-            throw Error("Invalid optional build trace from remote");
+            throw UnstructuredError("Invalid optional build trace from remote");
         }
     }
 }
@@ -543,7 +543,7 @@ void WorkerProto::Serialise<std::optional<UnkeyedRealisation>>::write(
 DrvOutput WorkerProto::Serialise<DrvOutput>::read(const StoreDirConfig & store, ReadConn conn)
 {
     if (!conn.version.features.contains(WorkerProto::featureRealisationWithPath)) {
-        throw Error(
+        throw UnstructuredError(
             "the daemon is missing the '%s' protocol feature, needed to support content-addressing derivations",
             WorkerProto::featureRealisationWithPath);
     }
@@ -560,7 +560,7 @@ DrvOutput WorkerProto::Serialise<DrvOutput>::read(const StoreDirConfig & store, 
 void WorkerProto::Serialise<DrvOutput>::write(const StoreDirConfig & store, WriteConn conn, const DrvOutput & info)
 {
     if (!conn.version.features.contains(WorkerProto::featureRealisationWithPath)) {
-        throw Error(
+        throw UnstructuredError(
             "the daemon is missing the '%s' protocol feature, needed to support content-addressing derivations",
             WorkerProto::featureRealisationWithPath);
     }
@@ -611,7 +611,7 @@ GCOptions::GCPaths WorkerProto::Serialise<GCOptions::GCPaths>::read(const StoreD
     case 1:
         return GCOptions::WholeStore{};
     default:
-        throw Error("Invalid whole store indicator from remote");
+        throw UnstructuredError("Invalid whole store indicator from remote");
     }
 }
 

@@ -170,7 +170,7 @@ static void getAllExprs(EvalState & state, const SourcePath & path, StringSet & 
             auto vArg = state.allocValue();
             vArg->mkPath(path2, state.mem);
             if (seen.size() == maxAttrs)
-                throw Error("too many Nix expressions in directory '%1%'", path);
+                throw UnstructuredError("too many Nix expressions in directory '%1%'", path);
             attrs.alloc(attrName).mkApp(&state.getBuiltin("import"), vArg);
         } else if (st.type == SourceAccessor::tDirectory)
             /* `path2' is a directory (with no default.nix in it);
@@ -201,7 +201,7 @@ static void loadSourceExpr(EvalState & state, const SourcePath & path, Value & v
     }
 
     else
-        throw Error("path '%s' is not a directory or a Nix expression", path);
+        throw UnstructuredError("path '%s' is not a directory or a Nix expression", path);
 }
 
 static void loadDerivations(
@@ -254,7 +254,7 @@ static void checkSelectorUse(DrvNames & selectors)
     /* Check that all selectors have been used. */
     for (auto & i : selectors)
         if (i.hits == 0 && i.fullName != "*")
-            throw Error("selector '%1%' matches no derivations", i.fullName);
+            throw UnstructuredError("selector '%1%' matches no derivations", i.fullName);
 }
 
 namespace {
@@ -377,13 +377,13 @@ filterBySelector(EvalState & state, const PackageInfos & allElems, const Strings
             const auto prefixHits = searchByPrefix(allElems, selector.name);
 
             if (prefixHits.empty()) {
-                throw Error("selector '%1%' matches no derivations", selector.fullName);
+                throw UnstructuredError("selector '%1%' matches no derivations", selector.fullName);
             } else {
                 std::string suggestionMessage = ", maybe you meant:";
                 for (const auto & drvName : prefixHits) {
                     suggestionMessage += fmt("\n%s", drvName);
                 }
-                throw Error("selector '%1%' matches no derivations" + suggestionMessage, selector.fullName);
+                throw UnstructuredError("selector '%1%' matches no derivations" + suggestionMessage, selector.fullName);
             }
         }
     }
@@ -760,7 +760,7 @@ static void opSet(Globals & globals, Strings opFlags, Strings opArgs)
 {
     auto store2 = globals.state->store.dynamic_pointer_cast<LocalFSStore>();
     if (!store2)
-        throw Error("--set is not supported for this Nix store");
+        throw UnstructuredError("--set is not supported for this Nix store");
 
     for (Strings::iterator i = opFlags.begin(); i != opFlags.end();) {
         std::string arg = *i++;
@@ -774,7 +774,7 @@ static void opSet(Globals & globals, Strings opFlags, Strings opArgs)
     queryInstSources(*globals.state, globals.instSource, opArgs, elems, true);
 
     if (elems.size() != 1)
-        throw Error("--set requires exactly one derivation");
+        throw UnstructuredError("--set requires exactly one derivation");
 
     PackageInfo & drv(elems.front());
 
@@ -1342,12 +1342,12 @@ static void opListGenerations(Globals & globals, Strings opFlags, Strings opArgs
 #ifdef _WIN32 // TODO portable wrapper in libutil
         tm * tp = localtime(&i.creationTime);
         if (!tp)
-            throw Error("cannot convert time");
+            throw UnstructuredError("cannot convert time");
         auto & t = *tp;
 #else
         tm t;
         if (!localtime_r(&i.creationTime, &t))
-            throw Error("cannot convert time");
+            throw UnstructuredError("cannot convert time");
 #endif
         logger->cout(
             "%|4|   %|4|-%|02|-%|02| %|02|:%|02|:%|02|   %||",
@@ -1374,11 +1374,11 @@ static void opDeleteGenerations(Globals & globals, Strings opFlags, Strings opAr
         deleteGenerationsOlderThan(globals.profile, t, globals.dryRun);
     } else if (opArgs.size() == 1 && opArgs.front().find('+') != std::string::npos) {
         if (opArgs.front().size() < 2)
-            throw Error("invalid number of generations '%1%'", opArgs.front());
+            throw UnstructuredError("invalid number of generations '%1%'", opArgs.front());
         auto str_max = opArgs.front().substr(1);
         auto max = string2Int<GenerationNumber>(str_max);
         if (!max)
-            throw Error("invalid number of generations to keep '%1%'", opArgs.front());
+            throw UnstructuredError("invalid number of generations to keep '%1%'", opArgs.front());
         deleteGenerationsGreaterThan(globals.profile, *max, globals.dryRun);
     } else {
         std::set<GenerationNumber> gens;

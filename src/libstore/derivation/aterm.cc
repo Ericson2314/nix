@@ -475,7 +475,7 @@ Full parse(
         break;
     }
     default:
-        throw Error("derivation does not start with 'Derive' or 'DrvWithVersion'");
+        throw UnstructuredError("derivation does not start with 'Derive' or 'DrvWithVersion'");
     }
 
     /* Parse the map of outputs. The value is three fields rather than

@@ -235,12 +235,12 @@ public:
         log(*state, lvl, s);
     }
 
-    void logEI(const ErrorInfo & ei) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
     {
         auto state(state_.lock());
 
         std::ostringstream oss;
-        showErrorInfo(oss, ei, loggerSettings.showTrace.get());
+        showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
 
         log(*state, ei.level, oss.view());
     }

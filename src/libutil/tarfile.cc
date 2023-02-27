@@ -46,7 +46,7 @@ void TarArchive::check(int err, const std::string & reason, bool warningsAreFata
     else if (err == ARCHIVE_WARN && !warningsAreFatal)
         warn(reason, archive_error_string(archive));
     else if (err != ARCHIVE_OK)
-        throw Error(reason, archive_error_string(archive));
+        throw UnstructuredError(reason, archive_error_string(archive));
 }
 
 static void enableSupportedFormats(struct archive * archive)
@@ -166,7 +166,7 @@ static void extract_archive(TarArchive & archive, const std::filesystem::path & 
             /* Some archives might lack a pathname https://github.com/libarchive/libarchive/issues/2089. */
             auto * name = NIX_LIBARCHIVE_NATIVE_PATH_FUNC(archive_entry_pathname)(entry);
             if (!name)
-                throw Error("cannot get archive member name: %s", archive_error_string(archive.archive));
+                throw UnstructuredError("cannot get archive member name: %s", archive_error_string(archive.archive));
             if (r == ARCHIVE_WARN)
                 warn(
                     "getting archive member '%1%': %2%",
@@ -223,7 +223,7 @@ time_t unpackTarfileToSink(TarArchive & archive, TarSink & parseSink)
             break;
         auto path = archive_entry_pathname(entry);
         if (!path)
-            throw Error("cannot get archive member name: %s", archive_error_string(archive.archive));
+            throw UnstructuredError("cannot get archive member name: %s", archive_error_string(archive.archive));
         auto cpath = CanonPath{path};
         if (r == ARCHIVE_WARN)
             warn("getting archive member '%1%': %2%", path, archive_error_string(archive.archive));
@@ -271,7 +271,7 @@ time_t unpackTarfileToSink(TarArchive & archive, TarSink & parseSink)
         }
 
         default:
-            throw Error("file '%s' in tarball has unsupported file type %d", path, type);
+            throw UnstructuredError("file '%s' in tarball has unsupported file type %d", path, type);
         }
     }
 

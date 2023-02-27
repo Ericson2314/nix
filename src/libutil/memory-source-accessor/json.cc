@@ -142,7 +142,7 @@ adl_serializer<nix::fso::VariantT<RegularContents, recur>>::from_json(const json
     if (type == "symlink")
         return static_cast<typename Variant::Symlink>(json);
     else
-        throw Error("unknown type of file '%s'", type);
+        throw UnstructuredError("unknown type of file '%s'", type);
 }
 
 // Explicit instantiations for VariantT types we use

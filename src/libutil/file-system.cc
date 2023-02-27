@@ -96,10 +96,10 @@ absPath(const std::filesystem::path & path0, const std::filesystem::path * dir, 
 std::filesystem::path canonPath(const std::filesystem::path & path, bool resolveSymlinks)
 {
     if (path.empty())
-        throw Error("cannot canonicalise an empty path");
+        throw UnstructuredError("cannot canonicalise an empty path");
 
     if (!path.is_absolute())
-        throw Error("not an absolute path: %s", PathFmt(path));
+        throw UnstructuredError("not an absolute path: %s", PathFmt(path));
 
     /* This just exists because we cannot set the target of `remaining`
        (the callback parameter) directly to a newly-constructed string,
@@ -115,7 +115,7 @@ std::filesystem::path canonPath(const std::filesystem::path & path, bool resolve
         [&followCount, &temp, maxFollow, resolveSymlinks](std::string & result, std::string_view & remaining) {
             if (resolveSymlinks && std::filesystem::is_symlink(result)) {
                 if (++followCount >= maxFollow)
-                    throw Error("infinite symlink recursion in path '%1%'", remaining);
+                    throw UnstructuredError("infinite symlink recursion in path '%1%'", remaining);
                 remaining = (temp = concatStrings(readLink(result).string(), remaining));
                 if (std::filesystem::path(remaining).is_absolute()) {
                     /* restart for symlinks pointing to absolute path */
@@ -605,7 +605,7 @@ void copyFile(const std::filesystem::path & from, const std::filesystem::path & 
             copyFile(entry, to / entry.path().filename(), andDelete);
         }
     } else {
-        throw Error("file %s has an unsupported type", PathFmt(from));
+        throw UnstructuredError("file %s has an unsupported type", PathFmt(from));
     }
 
     setWriteTime(to, lstat(from));

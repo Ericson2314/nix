@@ -19,7 +19,8 @@ PackageInfos queryInstalled(EvalState & state, const std::filesystem::path & use
 {
     PackageInfos elems;
     if (pathExists(userEnv / "manifest.json"))
-        throw Error("profile %s is incompatible with 'nix-env'; please use 'nix profile' instead", PathFmt(userEnv));
+        throw UnstructuredError(
+            "profile %s is incompatible with 'nix-env'; please use 'nix profile' instead", PathFmt(userEnv));
     auto manifestFile = userEnv / "manifest.nix";
     if (pathExists(manifestFile)) {
         Value v;

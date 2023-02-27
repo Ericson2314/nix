@@ -52,28 +52,28 @@ static std::string doRenderMarkdownToTerminal(std::string_view markdown)
 
     auto doc = lowdown_doc_new(&opts);
     if (!doc)
-        throw Error("cannot allocate Markdown document");
+        throw UnstructuredError("cannot allocate Markdown document");
     Finally freeDoc([&]() { lowdown_doc_free(doc); });
 
     size_t maxn = 0;
     auto node = lowdown_doc_parse(doc, &maxn, markdown.data(), markdown.size(), nullptr);
     if (!node)
-        throw Error("cannot parse Markdown document");
+        throw UnstructuredError("cannot parse Markdown document");
     Finally freeNode([&]() { lowdown_node_free(node); });
 
     auto renderer = lowdown_term_new(&opts);
     if (!renderer)
-        throw Error("cannot allocate Markdown renderer");
+        throw UnstructuredError("cannot allocate Markdown renderer");
     Finally freeRenderer([&]() { lowdown_term_free(renderer); });
 
     auto buf = lowdown_buf_new(16384);
     if (!buf)
-        throw Error("cannot allocate Markdown output buffer");
+        throw UnstructuredError("cannot allocate Markdown output buffer");
     Finally freeBuffer([&]() { lowdown_buf_free(buf); });
 
     int rndr_res = lowdown_term_rndr(buf, renderer, node);
     if (!rndr_res)
-        throw Error("allocation error while rendering Markdown");
+        throw UnstructuredError("allocation error while rendering Markdown");
 
     return std::string(buf->data, buf->size);
 }

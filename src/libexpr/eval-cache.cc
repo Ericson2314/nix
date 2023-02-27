@@ -352,7 +352,7 @@ struct AttrDb
         case AttrType::Failed:
             return {{rowId, failed_t()}};
         default:
-            throw Error("unexpected type in evaluation cache");
+            throw UnstructuredError("unexpected type in evaluation cache");
         }
     }
 };
@@ -418,7 +418,7 @@ Value & AttrCursor::getValue()
             root->state.forceAttrs(vParent, noPos, "while searching for an attribute");
             auto attr = vParent.attrs()->get(parent->second);
             if (!attr)
-                throw Error("attribute '%s' is unexpectedly missing", getAttrPathStr());
+                throw UnstructuredError("attribute '%s' is unexpectedly missing", getAttrPathStr());
             _value = allocRootValue(attr->value);
         } else
             _value = allocRootValue(root->getRootValue());
@@ -576,7 +576,7 @@ ref<AttrCursor> AttrCursor::getAttr(Symbol name)
 {
     auto p = maybeGetAttr(name);
     if (!p)
-        throw Error("attribute '%s' does not exist", getAttrPathStr(name));
+        throw UnstructuredError("attribute '%s' does not exist", getAttrPathStr(name));
     return ref(p);
 }
 
@@ -789,7 +789,7 @@ StorePath AttrCursor::forceDerivation()
                been garbage-collected. So force it to be regenerated. */
             aDrvPath->forceValue();
             if (!root->state.store->isValidPath(drvPath))
-                throw Error(
+                throw UnstructuredError(
                     "don't know how to recreate store derivation '%s'!", root->state.store->printStorePath(drvPath));
         }
     }

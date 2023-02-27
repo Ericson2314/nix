@@ -72,7 +72,7 @@ nix::DerivationOutput adl_serializer<nix::DerivationOutput>::from_json(
            reasons described above), so we don't need to check it. */
 #if 0
         if (dof.path(store, drvName, outputName) != static_cast<StorePath>(valueAt(json, "path")))
-            throw Error("Path doesn't match derivation output");
+            throw UnstructuredError("Path doesn't match derivation output");
 #endif
         return dof;
     }
@@ -100,7 +100,7 @@ nix::DerivationOutput adl_serializer<nix::DerivationOutput>::from_json(
     }
 
     else {
-        throw Error("invalid JSON for derivation output");
+        throw UnstructuredError("invalid JSON for derivation output");
     }
 }
 
@@ -242,7 +242,7 @@ nix::derivation::Derivation<Inputs> adl_serializer<nix::derivation::Derivation<I
     {
         auto version = getUnsigned(valueAt(json, "version"));
         if (version != expectedJsonVersionDerivation)
-            throw Error(
+            throw UnstructuredError(
                 "Unsupported derivation JSON format version %d, only format version %d is currently supported.",
                 version,
                 expectedJsonVersionDerivation);

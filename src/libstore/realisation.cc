@@ -6,7 +6,7 @@
 
 namespace nix {
 
-MakeError(InvalidDerivationOutputId, Error);
+MakeError(InvalidDerivationOutputId, UnstructuredError);
 
 void InvalidDerivationOutputId::anchor() {}
 

@@ -26,7 +26,7 @@ TEST_F(ErrorTraceTest, TraceBuilder)
                 throw;
             }
         } catch (BaseError & e) {
-            ASSERT_EQ(PrintToString(e.info().msg), PrintToString(HintFmt("puppy")));
+            ASSERT_EQ(PrintToString(e.renderMessage()), PrintToString(HintFmt("puppy")));
             auto trace = e.info().traces.rbegin();
             ASSERT_EQ(e.info().traces.size(), 2u);
             ASSERT_EQ(PrintToString(trace->hint), PrintToString(HintFmt("doggy")));

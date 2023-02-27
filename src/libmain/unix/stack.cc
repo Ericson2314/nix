@@ -54,7 +54,7 @@ void detectStackOverflow()
     static auto stackBuf = std::make_unique<std::vector<char>>(stack.ss_size);
     stack.ss_sp = stackBuf->data();
     if (!stack.ss_sp)
-        throw Error("cannot allocate alternative stack");
+        throw UnstructuredError("cannot allocate alternative stack");
     stack.ss_flags = 0;
     if (sigaltstack(&stack, 0) == -1)
         throw SysError("cannot set alternative stack");

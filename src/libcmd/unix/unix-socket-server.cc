@@ -67,7 +67,7 @@ PeerInfo getPeerInfo(Descriptor remote)
     auto listenFds = getEnv("LISTEN_FDS");
     if (listenFds) {
         if (getEnv("LISTEN_PID") != std::to_string(getpid()))
-            throw Error("unexpected systemd environment variables");
+            throw UnstructuredError("unexpected systemd environment variables");
 
         auto fdNames = tokenizeString<std::vector<std::string>>(getEnv("LISTEN_FDNAMES").value_or(""), ":");
         auto count = string2Int<unsigned int>(*listenFds);
@@ -136,10 +136,8 @@ PeerInfo getPeerInfo(Descriptor remote)
             /* Explicitly aborted, bail out. */
             throw;
         } catch (Error & error) {
-            auto ei = error.info();
             // FIXME: add to trace?
-            ei.msg = HintFmt("while processing connection: %1%", ei.msg.str());
-            logError(ei);
+            logError(error.info(), HintFmt("while processing connection: %1%", error.message()));
         }
     }
 }

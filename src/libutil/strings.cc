@@ -96,7 +96,7 @@ std::list<std::string> shellSplitString(std::string_view s)
             }
         }
         if (s.empty()) {
-            throw Error("unterminated double quote");
+            throw UnstructuredError("unterminated double quote");
         }
     };
 
@@ -110,7 +110,7 @@ std::list<std::string> shellSplitString(std::string_view s)
             pushChar(c);
         }
         if (s.empty()) {
-            throw Error("unterminated single quote");
+            throw UnstructuredError("unterminated single quote");
         }
     };
 
@@ -155,7 +155,7 @@ const char * requireCString(const std::string & s)
     if (std::memchr(s.data(), '\0', s.size())) [[unlikely]] {
         using namespace std::string_view_literals;
         auto str = replaceStrings(s, "\0"sv, "␀"sv);
-        throw Error("string '%s' with null (␀) bytes used where it's not allowed", str);
+        throw UnstructuredError("string '%s' with null (␀) bytes used where it's not allowed", str);
     }
     return s.c_str();
 }

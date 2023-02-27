@@ -43,12 +43,12 @@ static void downloadToSink(
     auto hashResult = hashSink.finish();
 
     if (sizeExpected != hashResult.numBytesDigested)
-        throw Error(
+        throw UnstructuredError(
             "size mismatch while fetching %s: expected %d but got %d", url, sizeExpected, hashResult.numBytesDigested);
 
     auto sha256Actual = hashResult.hash.to_string(HashFormat::Base16, false);
     if (sha256Actual != sha256Expected)
-        throw Error(
+        throw UnstructuredError(
             "hash mismatch while fetching %s: expected sha256:%s but got sha256:%s", url, sha256Expected, sha256Actual);
 }
 
@@ -76,7 +76,7 @@ LfsApiInfo getLfsApi(ParsedURL url)
         auto [status, output] = runProgram({.program = "ssh", .args = args});
 
         if (output.empty())
-            throw Error(
+            throw UnstructuredError(
                 "git-lfs-authenticate: no output (cmd: 'ssh %s')",
                 concatMapStringsSep(
                     " ", args, [](const OsString & s) { return escapeShellArgAlways(os_string_to_string(s)); }));
@@ -84,10 +84,10 @@ LfsApiInfo getLfsApi(ParsedURL url)
         auto queryResp = nlohmann::json::parse(output);
         auto headerIt = queryResp.find("header");
         if (headerIt == queryResp.end())
-            throw Error("no header in git-lfs-authenticate response");
+            throw UnstructuredError("no header in git-lfs-authenticate response");
         auto authIt = headerIt->find("Authorization");
         if (authIt == headerIt->end())
-            throw Error("no Authorization in git-lfs-authenticate response");
+            throw UnstructuredError("no Authorization in git-lfs-authenticate response");
 
         return {queryResp.at("href").get<std::string>(), authIt->get<std::string>()};
     }
@@ -227,7 +227,7 @@ bool Fetch::shouldFetch(const CanonPath & path) const
     opts.attr_commit_id = this->rev;
     opts.flags = GIT_ATTR_CHECK_INCLUDE_COMMIT | GIT_ATTR_CHECK_NO_SYSTEM;
     if (git_attr_get_ext(&attr, (git_repository *) (this->repo), &opts, path.rel_c_str(), "filter"))
-        throw Error("cannot get git-lfs attribute: %s", git_error_last()->message);
+        throw UnstructuredError("cannot get git-lfs attribute: %s", git_error_last()->message);
     debug("Git filter for '%s' is '%s'", path, attr ? attr : "null");
     return attr != nullptr && !std::string(attr).compare("lfs");
 }
@@ -273,12 +273,12 @@ std::vector<nlohmann::json> Fetch::fetchUrls(const std::vector<Pointer> & pointe
         if (resp.contains("objects"))
             objects.insert(objects.end(), resp["objects"].begin(), resp["objects"].end());
         else
-            throw Error("response does not contain 'objects'");
+            throw UnstructuredError("response does not contain 'objects'");
 
         return objects;
     } catch (const nlohmann::json::parse_error & e) {
         printMsg(lvlTalkative, "Full response: '%1%'", responseString);
-        throw Error("response did not parse as json: %s", e.what());
+        throw UnstructuredError("response did not parse as json: %s", e.what());
     }
 }
 
@@ -344,7 +344,7 @@ void Fetch::fetch(
         auto objOid = getString(valueAt(getObject(obj), "oid"));
         auto objSize = getUnsigned(valueAt(getObject(obj), "size"));
         if (objOid != pointer->oid || objSize != pointer->size) {
-            throw Error(
+            throw UnstructuredError(
                 "LFS server returned mismatched oid/size for '%s' (got oid=%s size=%d, expected oid=%s size=%d)",
                 pointerFilePath,
                 objOid,
@@ -373,7 +373,7 @@ void Fetch::fetch(
 
         debug("%s fetched with git-lfs", pointerFilePath);
     } catch (const nlohmann::json::out_of_range & e) {
-        throw Error("bad json from /info/lfs/objects/batch: %s %s", obj, e.what());
+        throw UnstructuredError("bad json from /info/lfs/objects/batch: %s %s", obj, e.what());
     }
 }
 

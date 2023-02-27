@@ -161,7 +161,7 @@ std::pair<int, std::string> runProgram(RunOptions && options);
 
 void runProgram2(const RunOptions & options);
 
-class ExecError final : public CloneableError<ExecError, Error>
+class ExecError final : public CloneableError<ExecError, UnstructuredError>
 {
     void anchor() override;
 

@@ -138,7 +138,7 @@ void setWriteTime(
         if (utimes(path.c_str(), times) == -1)
             throw SysError("changing modification time of %s (not a symlink)", PathFmt{path});
     } else {
-        throw Error("Cannot change modification time of symlink %s", PathFmt{path});
+        throw UnstructuredError("Cannot change modification time of symlink %s", PathFmt{path});
     }
 #  endif
 #endif

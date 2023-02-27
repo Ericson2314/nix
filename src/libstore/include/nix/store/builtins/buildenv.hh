@@ -23,7 +23,7 @@ struct Package
     }
 };
 
-class BuildEnvFileConflictError final : public CloneableError<BuildEnvFileConflictError, Error>
+class BuildEnvFileConflictError final : public CloneableError<BuildEnvFileConflictError, UnstructuredError>
 {
 private:
     void anchor() override;

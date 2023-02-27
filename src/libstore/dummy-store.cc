@@ -216,10 +216,11 @@ public:
             unsupported("addToStore");
 
         if (repair)
-            throw Error("repairing is not supported for '%s' store", config->getHumanReadableURI());
+            throw UnstructuredError("repairing is not supported for '%s' store", config->getHumanReadableURI());
 
         if (checkSigs)
-            throw Error("checking signatures is not supported for '%s' store", config->getHumanReadableURI());
+            throw UnstructuredError(
+                "checking signatures is not supported for '%s' store", config->getHumanReadableURI());
 
         auto accessor = make_ref<MemorySourceAccessor>();
         MemorySink tempSink{*accessor};
@@ -253,13 +254,13 @@ public:
         RepairFlag repair = NoRepair) override
     {
         if (isDerivation(name))
-            throw Error("Do not insert derivation into dummy store with `addToStoreFromDump`");
+            throw UnstructuredError("Do not insert derivation into dummy store with `addToStoreFromDump`");
 
         if (config->readOnly)
             unsupported("addToStoreFromDump");
 
         if (repair)
-            throw Error("repairing is not supported for '%s' store", config->getHumanReadableURI());
+            throw UnstructuredError("repairing is not supported for '%s' store", config->getHumanReadableURI());
 
         auto temp = make_ref<MemorySourceAccessor>();
 
@@ -331,7 +332,7 @@ public:
         if (std::optional res = getConcurrent(derivations, drvPath))
             return *res;
         else
-            throw Error("derivation '%s' is not valid", printStorePath(drvPath));
+            throw UnstructuredError("derivation '%s' is not valid", printStorePath(drvPath));
     }
 
     /**

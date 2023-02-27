@@ -76,7 +76,8 @@ static void expectType(EvalState & state, ValueType type, Value & value, const P
 {
     forceTrivialValue(state, value, pos);
     if (value.type() != type)
-        throw Error("expected %s but got %s at %s", showType(type), showType(value.type()), state.positions[pos]);
+        throw UnstructuredError(
+            "expected %s but got %s at %s", showType(type), showType(value.type()), state.positions[pos]);
 }
 
 static std::pair<std::map<FlakeId, FlakeInput>, fetchers::Attrs> parseFlakeInputs(
@@ -154,14 +155,14 @@ static FlakeInput parseFlakeInput(
                 else if (attr.value->type() == nPath) {
                     auto path = attr.value->path();
                     if (path.accessor != flakeDir.accessor)
-                        throw Error(
+                        throw UnstructuredError(
                             "input attribute path '%s' at %s must be in the same source tree as %s",
                             path,
                             state.positions[attr.pos],
                             flakeDir);
                     url = "path:" + flakeDir.path.makeRelative(path.path);
                 } else
-                    throw Error(
+                    throw UnstructuredError(
                         "expected a string or a path but got %s at %s",
                         showType(attr.value->type()),
                         state.positions[attr.pos]);
@@ -196,13 +197,15 @@ static FlakeInput parseFlakeInput(
     else {
         attrs.erase("url");
         if (!attrs.empty())
-            throw Error("unexpected flake input attribute '%s', at %s", attrs.begin()->first, state.positions[pos]);
+            throw UnstructuredError(
+                "unexpected flake input attribute '%s', at %s", attrs.begin()->first, state.positions[pos]);
         if (url)
             input.ref = parseFlakeRef(*url, {}, true, input.isFlake, true);
     }
 
     if (input.ref && input.follows)
-        throw Error("flake input has both a flake reference and a follows attribute, at %s", state.positions[pos]);
+        throw UnstructuredError(
+            "flake input has both a flake reference and a follows attribute, at %s", state.positions[pos]);
 
     return input;
 }
@@ -224,7 +227,7 @@ static std::pair<std::map<FlakeId, FlakeInput>, fetchers::Attrs> parseFlakeInput
         auto inputName = state.symbols[inputAttr.name];
         if (inputName == "self") {
             if (!allowSelf)
-                throw Error("'self' input attribute not allowed at %s", state.positions[inputAttr.pos]);
+                throw UnstructuredError("'self' input attribute not allowed at %s", state.positions[inputAttr.pos]);
             expectType(state, nAttrs, *inputAttr.value, inputAttr.pos);
             for (auto & attr : *inputAttr.value->attrs())
                 parseFlakeInputAttr(state, attr, selfAttrs);
@@ -290,7 +293,7 @@ static Flake readFlake(
         }
 
     } else
-        throw Error("flake '%s' lacks attribute 'outputs'", resolvedRef);
+        throw UnstructuredError("flake '%s' lacks attribute 'outputs'", resolvedRef);
 
     auto sNixConfig = state.symbols.create("nixConfig");
 
@@ -336,7 +339,7 @@ static Flake readFlake(
     for (auto & attr : *vInfo.attrs()) {
         if (attr.name != state.s.description && attr.name != sInputs && attr.name != sOutputs
             && attr.name != sNixConfig)
-            throw Error(
+            throw UnstructuredError(
                 "flake '%s' has an unsupported attribute '%s', at %s",
                 resolvedRef,
                 state.symbols[attr.name],
@@ -354,7 +357,7 @@ static FlakeRef applySelfAttrs(const FlakeRef & ref, const Flake & flake)
 
     for (auto & attr : flake.selfAttrs) {
         if (!allowedAttrs.contains(attr.first))
-            throw Error("flake 'self' attribute '%s' is not supported", attr.first);
+            throw UnstructuredError("flake 'self' attribute '%s' is not supported", attr.first);
         newRef.input.attrs.insert_or_assign(attr.first, attr.second);
     }
 
@@ -423,7 +426,7 @@ LockedFlake lockFlake(
 
     try {
         if (!state.fetchSettings.allowDirty && lockFlags.referenceLockFilePath) {
-            throw Error("reference lock file was provided, but the `allow-dirty` setting is set to false");
+            throw UnstructuredError("reference lock file was provided, but the `allow-dirty` setting is set to false");
         }
 
         auto oldLockFile =
@@ -696,7 +699,8 @@ LockedFlake lockFlake(
 
                         if (!lockFlags.allowUnlocked && !input.ref->input.isLocked(state.fetchSettings)
                             && !input.ref->input.isRelative())
-                            throw Error("cannot update unlocked flake input '%s' in pure mode", inputAttrPathS);
+                            throw UnstructuredError(
+                                "cannot update unlocked flake input '%s' in pure mode", inputAttrPathS);
 
                         /* Note: in case of an --override-input, we use
                             the *original* ref (input2.ref) for the
@@ -720,7 +724,7 @@ LockedFlake lockFlake(
                             /* Guard against circular flake imports. */
                             for (auto & parent : parents)
                                 if (parent == *input.ref)
-                                    throw Error("found circular import of flake '%s'", parent);
+                                    throw UnstructuredError("found circular import of flake '%s'", parent);
                             parents.push_back(*input.ref);
                             Finally cleanup([&]() { parents.pop_back(); });
 
@@ -808,7 +812,7 @@ LockedFlake lockFlake(
                 if (sourcePath || lockFlags.outputLockFilePath) {
                     if (auto unlockedInput = newLockFile.isUnlocked(state.fetchSettings)) {
                         if (lockFlags.failOnUnlocked)
-                            throw Error(
+                            throw UnstructuredError(
                                 "Not writing lock file of flake '%s' because it has an unlocked input ('%s'). "
                                 "Use '--allow-dirty-locks' to allow this anyway.",
                                 topRef,
@@ -820,7 +824,7 @@ LockedFlake lockFlake(
                                 *unlockedInput);
                     } else {
                         if (!lockFlags.updateLockFile)
-                            throw Error(
+                            throw UnstructuredError(
                                 "flake '%s' requires lock file changes but they're not allowed due to '--no-update-lock-file'",
                                 topRef);
 
@@ -828,7 +832,8 @@ LockedFlake lockFlake(
 
                         if (lockFlags.outputLockFilePath) {
                             if (lockFlags.commitLockFile)
-                                throw Error("'--commit-lock-file' and '--output-lock-file' are incompatible");
+                                throw UnstructuredError(
+                                    "'--commit-lock-file' and '--output-lock-file' are incompatible");
                             writeFile(*lockFlags.outputLockFilePath, newLockFileS);
                         } else {
                             auto relPath = (topRef.subdir == "" ? "" : topRef.subdir + "/") + "flake.lock";
@@ -878,7 +883,7 @@ LockedFlake lockFlake(
                             warn("committed new revision '%s'", flake.lockedRef.input.getRev()->gitRev());
                     }
                 } else
-                    throw Error(
+                    throw UnstructuredError(
                         "cannot write modified lock file of flake '%s' (use '--no-write-lock-file' to ignore)", topRef);
             } else {
                 warn("not writing modified lock file of flake '%s':\n%s", topRef, chomp(diff));
@@ -1029,7 +1034,7 @@ ref<eval_cache::EvalCache> openEvalCache(EvalState & state, ref<const LockedFlak
         /* For testing whether the evaluation cache is
            complete. */
         if (getEnv("NIX_ALLOW_EVAL").value_or("1") == "0")
-            throw Error("not everything is cached, but evaluation is not allowed");
+            throw UnstructuredError("not everything is cached, but evaluation is not allowed");
 
         auto vFlake = state.allocValue();
         callFlake(state, *lockedFlake, *vFlake);

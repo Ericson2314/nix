@@ -60,7 +60,7 @@ getFlakeRef(const fetchers::Settings & fetchSettings, const nlohmann::json & jso
         return FlakeRef::fromAttrs(attrs);
     }
 
-    throw Error("attribute '%s' missing in lock file", attr);
+    throw UnstructuredError("attribute '%s' missing in lock file", attr);
 }
 
 LockedNode::LockedNode(const fetchers::Settings & fetchSettings, const nlohmann::json & json)
@@ -77,7 +77,7 @@ LockedNode::LockedNode(const fetchers::Settings & fetchSettings, const nlohmann:
                 "This is not reproducible and will break after garbage collection or when shared.",
                 lockedRef.to_string());
         else
-            throw Error(
+            throw UnstructuredError(
                 "Lock file contains unlocked input '%s'. Use '--allow-dirty-locks' to accept this lock file.",
                 fetchers::attrsToJSON(lockedRef.input.toAttrs()));
     }
@@ -103,7 +103,7 @@ doFind(const ref<Node> & root, const InputAttrPath & path, std::vector<InputAttr
         std::vector<std::string> cycle;
         std::transform(found, visited.cend(), std::back_inserter(cycle), printInputAttrPath);
         cycle.push_back(printInputAttrPath(path));
-        throw Error("follow cycle detected: [%s]", concatStringsSep(" -> ", cycle));
+        throw UnstructuredError("follow cycle detected: [%s]", concatStringsSep(" -> ", cycle));
     }
     visited.push_back(path);
 
@@ -136,12 +136,12 @@ LockFile::LockFile(const fetchers::Settings & fetchSettings, std::string_view co
         try {
             return nlohmann::json::parse(contents);
         } catch (const nlohmann::json::parse_error & e) {
-            throw Error("Could not parse '%s': %s", path, e.what());
+            throw UnstructuredError("Could not parse '%s': %s", path, e.what());
         }
     }();
     auto version = json.value("version", 0);
     if (version < 5 || version > 7)
-        throw Error("lock file '%s' has unsupported version %d", path, version);
+        throw UnstructuredError("lock file '%s' has unsupported version %d", path, version);
 
     std::string rootKey = json["root"];
     std::map<std::string, ref<Node>> nodeMap{{rootKey, root}};
@@ -162,7 +162,7 @@ LockFile::LockFile(const fetchers::Settings & fetchSettings, std::string_view co
                     auto & nodes = json["nodes"];
                     auto jsonNode2 = nodes.find(inputKey);
                     if (jsonNode2 == nodes.end())
-                        throw Error("lock file references missing node '%s'", inputKey);
+                        throw UnstructuredError("lock file references missing node '%s'", inputKey);
                     auto input = make_ref<LockedNode>(fetchSettings, *jsonNode2);
                     k = nodeMap.insert_or_assign(inputKey, input).first;
                     getInputs(*input, *jsonNode2);
@@ -171,7 +171,7 @@ LockFile::LockFile(const fetchers::Settings & fetchSettings, std::string_view co
                     node.inputs.insert_or_assign(i.key(), ref(child));
                 else
                     // FIXME: replace by follows node
-                    throw Error("lock file contains cycle to root node");
+                    throw UnstructuredError("lock file contains cycle to root node");
             }
         }
     }(*root, json["nodes"][rootKey]);
@@ -422,7 +422,7 @@ void LockFile::check()
     for (auto & [inputAttrPath, input] : inputs) {
         if (auto follows = std::get_if<1>(&input)) {
             if (!follows->empty() && !findInput(*follows))
-                throw Error(
+                throw UnstructuredError(
                     "input '%s' follows a non-existent input '%s'",
                     printInputAttrPath(inputAttrPath),
                     printInputAttrPath(*follows));

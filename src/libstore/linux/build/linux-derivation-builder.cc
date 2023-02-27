@@ -172,7 +172,7 @@ void setupSeccomp(const LocalSettings & localSettings)
     if (seccomp_load(ctx) != 0)
         throw SysError("unable to load seccomp BPF program");
 #else
-    throw Error(
+    throw UnstructuredError(
         "seccomp is not supported on this platform; "
         "you can bypass this error by setting the option 'filter-syscalls' to false, but note that untrusted builds can then create setuid binaries!");
 #endif
@@ -253,13 +253,14 @@ static void doBind(
     /* `target` denotes a relative path inside the chroot directory. All operations happen
         relative to chrootRootDirFd. Bail out if the path is not what we expect. */
     if (target.empty() || target.is_absolute())
-        throw Error("invalid path to bind mount in the chroot: %s", PathFmt(target));
+        throw UnstructuredError("invalid path to bind mount in the chroot: %s", PathFmt(target));
 
     /* Sanity check against insane setups. This would never be passed in
        sandbox paths for dependencies, but the user might specify it in
        extra-sandbox-paths. */
     if (const auto filename = target.filename().native(); filename == "." || filename == "..")
-        throw Error("sandbox path to bind mount in the chroot has an invalid filename: %s", PathFmt(target));
+        throw UnstructuredError(
+            "sandbox path to bind mount in the chroot has an invalid filename: %s", PathFmt(target));
 
     debug("bind mounting %1% to %2%", PathFmt(source), PathFmt(chrootRootDirPath / target));
 
@@ -316,7 +317,7 @@ static void doBind(
                reject `..` components completely? */
             if (p.native() == "..") {
                 if (nestedDirCount == 0)
-                    throw Error("sandbox path %s escapes the chroot", PathFmt(path));
+                    throw UnstructuredError("sandbox path %s escapes the chroot", PathFmt(path));
                 --nestedDirCount;
             } else {
                 ++nestedDirCount;
@@ -366,7 +367,7 @@ static void doBind(
         auto [maybeDirFdOwned, dirFd, isRoot] = createDirsAndOpen(target);
         /* We must always open a fresh directory - i.e. the path must not resolve to chrootRootDir itself. */
         if (isRoot || !maybeDirFdOwned)
-            throw Error("sandbox path %s escapes the chroot", PathFmt(chrootRootDirPath / target));
+            throw UnstructuredError("sandbox path %s escapes the chroot", PathFmt(chrootRootDirPath / target));
         assert(maybeDirFdOwned.get() == dirFd); /* See the comment above. */
         bindMount(sourceFd.get(), dirFd);
     } else if (S_ISLNK(st.st_mode)) {
@@ -454,10 +455,10 @@ void ChrootLinuxDerivationBuilder::prepareUser()
            current cgroup. */
         auto cgroupFS = linux::getCgroupFS();
         if (!cgroupFS)
-            throw Error("cannot determine the cgroups file system");
+            throw UnstructuredError("cannot determine the cgroups file system");
         auto rootCgroupPath = *cgroupFS / linux::getRootCgroup().rel();
         if (!pathExists(rootCgroupPath))
-            throw Error("expected cgroup directory %s", PathFmt(rootCgroupPath));
+            throw UnstructuredError("expected cgroup directory %s", PathFmt(rootCgroupPath));
 
         static std::atomic<unsigned int> counter{0};
 
@@ -567,7 +568,7 @@ void ChrootLinuxDerivationBuilder::startChild()
                 if (errno != EPERM)
                     throw SysError("setgroups failed");
                 if (store->getLocalSettings().requireDropSupplementaryGroups)
-                    throw Error(
+                    throw UnstructuredError(
                         "setgroups failed. Set the require-drop-supplementary-groups option to false to skip this step.");
             }
 
@@ -593,7 +594,7 @@ void ChrootLinuxDerivationBuilder::startChild()
     if (auto status = helper.wait(); !statusOk(status)) {
         processSandboxSetupMessages();
         // Only reached if the child process didn't send an exception.
-        throw Error("unable to start build process: %s", statusToString(status));
+        throw UnstructuredError("unable to start build process: %s", statusToString(status));
     }
 
     userNamespaceSync.readSide = -1;
@@ -637,7 +638,7 @@ void ChrootLinuxDerivationBuilder::startChild()
     } else {
         debug("note: not using a user namespace");
         if (!buildUser)
-            throw Error(
+            throw UnstructuredError(
                 "cannot perform a sandboxed build because user namespaces are not enabled; check /proc/sys/user/max_user_namespaces");
     }
 
@@ -686,7 +687,7 @@ void ChrootLinuxDerivationBuilder::enterChroot()
     userNamespaceSync.writeSide = -1;
 
     if (readLine(userNamespaceSync.readSide.get()) != "1")
-        throw Error("user namespace initialisation failed");
+        throw UnstructuredError("user namespace initialisation failed");
 
     userNamespaceSync.readSide = -1;
 
@@ -982,7 +983,8 @@ void ChrootLinuxDerivationBuilder::addDependencyImpl(const StorePath & path)
 
     int status = child.wait();
     if (!statusOk(status))
-        throw Error("could not add path '%s' to sandbox: %s", store->printStorePath(path), statusToString(status));
+        throw UnstructuredError(
+            "could not add path '%s' to sandbox: %s", store->printStorePath(path), statusToString(status));
 }
 
 } // namespace nix

@@ -110,13 +110,13 @@ struct TunnelLogger : public Logger
         enqueueMsg(buf.s);
     }
 
-    void logEI(const ErrorInfo & ei) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
     {
         if (ei.level > verbosity)
             return;
 
         std::ostringstream oss;
-        showErrorInfo(oss, ei, false);
+        showErrorInfo(oss, ei, msg, false);
 
         StringSink buf;
         buf << STDERR_NEXT << oss.view();
@@ -308,7 +308,7 @@ struct ClientSettings
                         "ignoring the client-specified setting '%s', because it is a restricted setting and you are not a trusted user",
                         name);
             } catch (UsageError & e) {
-                logWarning(e.info());
+                logExWarning(e);
             }
         }
     }
@@ -343,7 +343,7 @@ static void performOp(
             WorkerProto::Op::IsValidPath,
         };
         if (std::ranges::find(validOperations, op) == validOperations.end()) {
-            throw Error("Operation %d not allowed inside derivation", op);
+            throw UnstructuredError("Operation %d not allowed inside derivation", op);
         }
     } else {
         // Operations designed only for the experimental builder-rpc-v0 should never be exposed outside
@@ -352,7 +352,7 @@ static void performOp(
         // Throw the same error we do when using an unknown operation.
         if (op == WorkerProto::Op::SubmitOutput
             || (op == WorkerProto::Op::AddToStoreScanning && recursive == daemon::RecursiveFlag::NotRecursive)) {
-            throw Error("invalid operation %1%", op);
+            throw UnstructuredError("invalid operation %1%", op);
         }
     }
 
@@ -497,7 +497,7 @@ static void performOp(
                 std::string hashAlgoRaw;
                 conn.from >> baseName >> fixed /* obsolete */ >> recursive >> hashAlgoRaw;
                 if (recursive > true)
-                    throw Error(
+                    throw UnstructuredError(
                         "unsupported FileIngestionMethod with value of %i; you may need to upgrade nix-daemon",
                         recursive);
                 method = recursive ? ContentAddressMethod::Raw::NixArchive : ContentAddressMethod::Raw::Flat;
@@ -596,7 +596,7 @@ static void performOp(
            Socket.
           */
         if (mode == bmRepair && !trusted)
-            throw Error("repairing is not allowed because you are not in 'trusted-users'");
+            throw UnstructuredError("repairing is not allowed because you are not in 'trusted-users'");
         logger->startWork();
         builder.buildPaths(drvs, mode);
         logger->stopWork();
@@ -614,7 +614,7 @@ static void performOp(
 
            FIXME: layer violation; see above. */
         if (mode == bmRepair && !trusted)
-            throw Error("repairing is not allowed because you are not in 'trusted-users'");
+            throw UnstructuredError("repairing is not allowed because you are not in 'trusted-users'");
 
         logger->startWork();
         auto results = builder.buildPathsWithResults(drvs, mode);
@@ -676,7 +676,7 @@ static void performOp(
            store the hashes, so there aren't two competing sources of truth an
            attacker could exploit. */
         if (!(drvType.isCA() || trusted))
-            throw Error("you are not privileged to build input-addressed derivations");
+            throw UnstructuredError("you are not privileged to build input-addressed derivations");
 
         /* Make sure that the non-input-addressed derivations that got this far
            are in fact content-addressed if we don't trust them. */
@@ -720,7 +720,7 @@ static void performOp(
 
     case WorkerProto::Op::AddPermRoot: {
         if (!trusted)
-            throw Error(
+            throw UnstructuredError(
                 "you are not privileged to create perm roots\n\n"
                 "hint: you can just do this client-side without special privileges, and probably want to do that instead.");
         auto storePath = WorkerProto::Serialise<StorePath>::read(*store, rconn);
@@ -798,7 +798,7 @@ static void performOp(
         if (options.action == GCAction::gcDeleteDead
             && std::holds_alternative<GCOptions::SpecificPaths>(options.pathsToDelete)
             && !conn.protoVersion.features.contains(WorkerProto::featureDeleteDeadSpecificReferrers)) {
-            throw Error(
+            throw UnstructuredError(
                 "Garbage collecting specific paths requested but it is not supported by the negotiated protocol");
         }
 
@@ -806,7 +806,7 @@ static void performOp(
 
         logger->startWork();
         if (options.ignoreLiveness)
-            throw Error("you are not allowed to ignore liveness");
+            throw UnstructuredError("you are not allowed to ignore liveness");
         auto & gcStore = require<GcStore>(*store);
         gcStore.collectGarbage(options, results);
         logger->stopWork();
@@ -929,7 +929,7 @@ static void performOp(
         conn.from >> checkContents >> repair;
         logger->startWork();
         if (repair && !trusted)
-            throw Error("you are not privileged to repair paths");
+            throw UnstructuredError("you are not privileged to repair paths");
         bool errors = store->verifyStore(checkContents, (RepairFlag) repair);
         logger->stopWork();
         conn.to << errors;
@@ -1044,7 +1044,7 @@ static void performOp(
         StorePath path{readString(conn.from)};
         logger->startWork();
         if (!trusted)
-            throw Error("you are not privileged to add logs");
+            throw UnstructuredError("you are not privileged to add logs");
         auto & logStore = require<LogStore>(*store);
         {
             FramedSource source(conn.from);
@@ -1064,10 +1064,11 @@ static void performOp(
         experimentalFeatureSettings.require(Xp::DynamicDerivations);
 
         if (!conn.protoVersion.features.contains(WorkerProto::featureAddToStoreScanning))
-            throw Error("Adding to store with scanning was requested, but not supported in negotiated protocol");
+            throw UnstructuredError(
+                "Adding to store with scanning was requested, but not supported in negotiated protocol");
 
         if (recursive == daemon::RecursiveFlag::NotRecursive)
-            throw Error(
+            throw UnstructuredError(
                 "AddToStoreScanning only valid within derivation with `builder-rpc-v0` or `recursive-nix` feature");
 
         auto & submitStore = require<SubmitStore>(*store);
@@ -1092,7 +1093,7 @@ static void performOp(
     case WorkerProto::Op::SubmitOutput: {
         experimentalFeatureSettings.require(Xp::DynamicDerivations);
         if (recursive != daemon::RecursiveFlag::RecursiveSubmitted)
-            throw Error("SubmitOutput only valid within derivation with `builder-rpc-v0` feature");
+            throw UnstructuredError("SubmitOutput only valid within derivation with `builder-rpc-v0` feature");
 
         auto path = WorkerProto::Serialise<SingleDerivedPath>::read(*store, rconn);
         auto output = WorkerProto::Serialise<OutputName>::read(*store, rconn);
@@ -1107,7 +1108,7 @@ static void performOp(
     }
 
     default:
-        throw Error("invalid operation %1%", op);
+        throw UnstructuredError("invalid operation %1%", op);
     }
 }
 
@@ -1155,7 +1156,7 @@ void processConnection(
     conn.protoVersion = WorkerProto::BasicServerConnection::handshake(to, from, localVersion);
 
     if (conn.protoVersion.number < WorkerProto::minimum.number)
-        throw Error("the Nix client version is too old");
+        throw UnstructuredError("the Nix client version is too old");
 
     conn.to = std::move(to);
     conn.from = std::move(from);
@@ -1222,7 +1223,7 @@ void processConnection(
                 if (!errorAllowed)
                     throw;
             } catch (std::bad_alloc & e) {
-                auto ex = Error("Nix daemon out of memory");
+                auto ex = UnstructuredError("Nix daemon out of memory");
                 tunnelLogger->stopWork(&ex);
                 throw;
             }
@@ -1237,7 +1238,7 @@ void processConnection(
         conn.to.flush();
         return;
     } catch (std::exception & e) {
-        auto ex = Error(e.what());
+        auto ex = UnstructuredError(e.what());
         tunnelLogger->stopWork(&ex);
         conn.to.flush();
         return;

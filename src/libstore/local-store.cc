@@ -192,7 +192,7 @@ LocalStore::LocalStore(ref<const Config> config)
         std::filesystem::path root = path.root_path();
         while (path != root) {
             if (std::filesystem::is_symlink(path))
-                throw Error(
+                throw UnstructuredError(
                     "the path %1% is a symlink; "
                     "this is not allowed for the Nix store and its parent directories",
                     PathFmt(path));
@@ -262,7 +262,7 @@ LocalStore::LocalStore(ref<const Config> config)
     if (config->readOnly && curSchema < nixSchemaVersion) {
         debug("current schema version: %d", curSchema);
         debug("supported schema version: %d", nixSchemaVersion);
-        throw Error(
+        throw UnstructuredError(
             curSchema == 0 ? "database does not exist, and cannot be created in read-only mode"
                            : "database schema needs migrating, but this cannot be done in read-only mode");
     }
@@ -279,7 +279,8 @@ LocalStore::LocalStore(ref<const Config> config)
     };
 
     if (curSchema > nixSchemaVersion)
-        throw Error("current Nix store schema is version %1%, but I only support %2%", curSchema, nixSchemaVersion);
+        throw UnstructuredError(
+            "current Nix store schema is version %1%, but I only support %2%", curSchema, nixSchemaVersion);
 
     else if (curSchema == 0) { /* new store */
         curSchema = nixSchemaVersion;
@@ -289,13 +290,13 @@ LocalStore::LocalStore(ref<const Config> config)
 
     else if (curSchema < nixSchemaVersion) {
         if (curSchema < 5)
-            throw Error(
+            throw UnstructuredError(
                 "Your Nix store has a database in Berkeley DB format,\n"
                 "which is no longer supported. To convert to the new format,\n"
                 "please upgrade Nix to version 0.12 first.");
 
         if (curSchema < 6)
-            throw Error(
+            throw UnstructuredError(
                 "Your Nix store has a database in flat file format,\n"
                 "which is no longer supported. To convert to the new format,\n"
                 "please upgrade Nix to version 1.11 first.");
@@ -424,11 +425,12 @@ void LocalStore::deleteStorePath(const std::filesystem::path & path, uint64_t & 
     } catch (SystemError & e) {
         if (config->ignoreGcDeleteFailure) {
             logWarning(
-                {.msg = HintFmt(
-                     isKnownPath ? "ignoring failure to remove store path %1%: %2%"
-                                 : "ignoring failure to remove garbage in store directory %1%: %2%",
-                     PathFmt(path),
-                     e.info().msg)});
+                {},
+                HintFmt(
+                    isKnownPath ? "ignoring failure to remove store path %1%: %2%"
+                                : "ignoring failure to remove garbage in store directory %1%: %2%",
+                    PathFmt(path),
+                    e.renderMessage()));
         } else {
             e.addTrace(
                 {},
@@ -506,7 +508,7 @@ int LocalStore::getSchema()
         auto s = readFile(schemaPath);
         auto n = string2Int<int>(s);
         if (!n)
-            throw Error("%1% is corrupt", PathFmt(schemaPath));
+            throw UnstructuredError("%1% is corrupt", PathFmt(schemaPath));
         curSchema = *n;
     }
     return curSchema;
@@ -515,7 +517,7 @@ int LocalStore::getSchema()
 void LocalStore::openDB(State & state, bool create)
 {
     if (create && config->readOnly) {
-        throw Error("cannot create database while in read-only mode");
+        throw UnstructuredError("cannot create database while in read-only mode");
     }
 
     if (access(dbDir.string().c_str(), R_OK | (config->readOnly ? 0 : W_OK)))
@@ -670,7 +672,7 @@ void LocalStore::registerDrvOutput(const Realisation & info, CheckSigsFlag check
     if (checkSigs == NoCheckSigs || !realisationIsUntrusted(info))
         registerDrvOutputUnchecked(info);
     else
-        throw Error(
+        throw UnstructuredError(
             "cannot register realisation '%s' because it lacks a signature by a trusted key", info.outPath.to_string());
 }
 
@@ -689,7 +691,7 @@ void LocalStore::registerDrvOutputUnchecked(const Realisation & info)
                     .apply(info.id.outputName)
                     .exec();
             } else {
-                throw Error(
+                throw UnstructuredError(
                     "Trying to register a realisation of '%s', but we already "
                     "have another one locally.\n"
                     "Local:  %s\n"
@@ -733,7 +735,7 @@ void LocalStore::cacheDrvOutputMapping(
 uint64_t LocalStore::addValidPath(State & state, const ValidPathInfo & info)
 {
     if (info.ca.has_value() && !info.isContentAddressed(*this))
-        throw Error(
+        throw UnstructuredError(
             "cannot add path '%s' to the Nix store because it claims to be content-addressed but isn't",
             printStorePath(info.path));
 
@@ -805,7 +807,7 @@ std::shared_ptr<const ValidPathInfo> LocalStore::queryPathInfoInternal(State & s
     try {
         narHash = Hash::parseAnyPrefixed(useQueryPathInfo.getStr(1));
     } catch (BadHash & e) {
-        throw Error("invalid-path entry for '%s': %s", printStorePath(path), e.what());
+        throw UnstructuredError("invalid-path entry for '%s': %s", printStorePath(path), e.what());
     }
 
     auto info = std::make_shared<ValidPathInfo>(path, UnkeyedValidPathInfo(*this, narHash));
@@ -949,7 +951,8 @@ LocalStore::queryStaticPartialDerivationOutput(const StorePath & path, const std
            that that it doesn't have an output with a known output path.
           */
         if (!experimentalFeatureSettings.isEnabled(Xp::CaDerivations))
-            throw Error("derivation '%s' does not have an output named '%s'", printStorePath(path), outputName);
+            throw UnstructuredError(
+                "derivation '%s' does not have an output named '%s'", printStorePath(path), outputName);
         return std::nullopt;
     }
     return it->second;
@@ -958,7 +961,7 @@ LocalStore::queryStaticPartialDerivationOutput(const StorePath & path, const std
 std::optional<StorePath> LocalStore::queryPathFromHashPart(const std::string & hashPart)
 {
     if (hashPart.size() != StorePath::HashLen)
-        throw Error("invalid hash part");
+        throw UnstructuredError("invalid hash part");
 
     std::string prefix = storeDir + "/" + hashPart;
 
@@ -1074,7 +1077,8 @@ bool LocalStore::realisationIsUntrusted(const Realisation & realisation)
 void LocalStore::addToStore(const ValidPathInfo & info, Source & source, RepairFlag repair, CheckSigsFlag checkSigs)
 {
     if (checkSigs && pathInfoIsUntrusted(info))
-        throw Error("cannot add path '%s' because it lacks a signature by a trusted key", printStorePath(info.path));
+        throw UnstructuredError(
+            "cannot add path '%s' because it lacks a signature by a trusted key", printStorePath(info.path));
 
     {
         addTempRoot(info.path);
@@ -1113,14 +1117,14 @@ void LocalStore::addToStore(const ValidPathInfo & info, Source & source, RepairF
                 auto hashResult = hashSink.finish();
 
                 if (hashResult.hash != info.narHash)
-                    throw Error(
+                    throw UnstructuredError(
                         "hash mismatch importing path '%s';\n  specified: %s\n  got:       %s",
                         printStorePath(info.path),
                         info.narHash.to_string(HashFormat::SRI, true),
                         hashResult.hash.to_string(HashFormat::SRI, true));
 
                 if (hashResult.numBytesDigested != info.narSize)
-                    throw Error(
+                    throw UnstructuredError(
                         "size mismatch importing path '%s';\n  specified: %s\n  got:       %s",
                         printStorePath(info.path),
                         info.narSize,
@@ -1153,7 +1157,7 @@ void LocalStore::addToStore(const ValidPathInfo & info, Source & source, RepairF
                         };
                     });
                     if (specified.hash != actualHash.hash) {
-                        throw Error(
+                        throw UnstructuredError(
                             "ca hash mismatch importing path '%s';\n  specified: %s\n  got:       %s",
                             printStorePath(info.path),
                             specified.hash.to_string(HashFormat::Nix32, true),
@@ -1524,9 +1528,9 @@ bool LocalStore::verifyStore(bool checkContents, RepairFlag repair)
                 /* It's possible that the path got GC'ed, so ignore
                    errors on invalid paths. */
                 if (isValidPath(i))
-                    logError(e.info());
+                    logExError(e);
                 else
-                    logWarning(e.info());
+                    logExWarning(e);
                 errors = true;
             }
         }
@@ -1611,7 +1615,7 @@ void LocalStore::verifyPath(
                 try {
                     getBuilder()->repairPath(path);
                 } catch (Error & e) {
-                    logWarning(e.info());
+                    logExWarning(e);
                     errors = true;
                 }
             else

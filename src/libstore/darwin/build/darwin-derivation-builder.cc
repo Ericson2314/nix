@@ -115,7 +115,7 @@ void DarwinDerivationBuilder::setUser()
             }
 
             if (i.first != i.second.source)
-                throw Error(
+                throw UnstructuredError(
                     "can't map %1% to %2%: mismatched impure paths not supported on Darwin",
                     PathFmt(i.first),
                     PathFmt(i.second.source));

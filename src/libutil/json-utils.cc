@@ -10,7 +10,8 @@ const nlohmann::json & valueAt(const nlohmann::json::object_t & map, std::string
     if (auto * p = optionalValueAt(map, key))
         return *p;
     else
-        throw Error("Expected JSON object to contain key '%s' but it doesn't: %s", key, nlohmann::json(map).dump());
+        throw UnstructuredError(
+            "Expected JSON object to contain key '%s' but it doesn't: %s", key, nlohmann::json(map).dump());
 }
 
 const nlohmann::json * optionalValueAt(const nlohmann::json::object_t & map, std::string_view key)
@@ -35,7 +36,7 @@ const nlohmann::json * getNullable(const nlohmann::json & value)
 static const nlohmann::json & ensureType(const nlohmann::json & value, nlohmann::json::value_type expectedType)
 {
     if (value.type() != expectedType)
-        throw Error(
+        throw UnstructuredError(
             "Expected JSON value to be of type '%s' but it is of type '%s': %s",
             nlohmann::json(expectedType).type_name(),
             value.type_name(),
@@ -71,7 +72,7 @@ const nlohmann::json::number_unsigned_t & getUnsigned(const nlohmann::json & val
     if (typeName == nlohmann::json(0).type_name())
         typeName = value.is_number_float() ? "floating point number"sv : "signed integral number"sv;
 
-    throw Error(
+    throw UnstructuredError(
         "Expected JSON value to be an unsigned integral number but it is of type '%s': %s", typeName, value.dump());
 }
 

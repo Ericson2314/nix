@@ -77,7 +77,7 @@ pathInfoToJSON(Store & store, const StorePathSet & storePaths, bool showClosureS
                         if (auto * depNarInfo = dynamic_cast<const NarInfo *>(&*depInfo))
                             totalDownloadSize += depNarInfo->fileSize;
                         else
-                            throw Error(
+                            throw UnstructuredError(
                                 "Missing .narinfo for dep %s of %s",
                                 store.printStorePath(p),
                                 store.printStorePath(storePath));

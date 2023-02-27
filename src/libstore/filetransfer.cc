@@ -123,7 +123,7 @@ FileTransferSettings::FileTransferSettings()
             {},
             "while applying the 'NIX_SSL_CERT_FILE' or 'SSL_CERT_FILE' environment variable; "
             "ignoring it for now, but this may become an error again in the future");
-        logWarning(e.info());
+        logExWarning(e);
     } catch (...) {
         /* Nothing at all may escape a static initializer, so this is a
            backstop for anything that is not an `Error`. */
@@ -142,7 +142,7 @@ namespace {
 using curlSList = std::unique_ptr<::curl_slist, decltype([](::curl_slist * list) { ::curl_slist_free_all(list); })>;
 using curlMulti = std::unique_ptr<::CURLM, decltype([](::CURLM * multi) { ::curl_multi_cleanup(multi); })>;
 
-struct curlMultiError final : CloneableError<curlMultiError, Error>
+struct curlMultiError final : CloneableError<curlMultiError, UnstructuredError>
 {
     ::CURLMcode code;
 
@@ -1090,7 +1090,7 @@ struct curlFileTransfer : public FileTransfer
             int running;
             CURLMcode mc = curl_multi_perform(curlm.get(), &running);
             if (mc != CURLM_OK)
-                throw nix::Error("unexpected error from curl_multi_perform(): %s", curl_multi_strerror(mc));
+                throw nix::UnstructuredError("unexpected error from curl_multi_perform(): %s", curl_multi_strerror(mc));
 
             /* Set the promises of any finished requests. */
             CURLMsg * msg;
@@ -1207,12 +1207,13 @@ struct curlFileTransfer : public FileTransfer
     {
         if (item->request.data && item->request.uri.scheme() != "http" && item->request.uri.scheme() != "https"
             && item->request.uri.scheme() != "s3")
-            throw nix::Error("uploading to '%s' is not supported", item->request.displayUri());
+            throw nix::UnstructuredError("uploading to '%s' is not supported", item->request.displayUri());
 
         {
             auto state(state_.lock());
             if (state->isQuitting())
-                throw nix::Error("cannot enqueue download request because the download thread is shutting down");
+                throw nix::UnstructuredError(
+                    "cannot enqueue download request because the download thread is shutting down");
             state->incoming.push(item);
             item->enqueued = true; /* Now any exceptions should be reported via the callback. */
             wakeupMulti(*state);
@@ -1480,7 +1481,7 @@ FileTransferError::FileTransferError(FileTransfer::Error error, std::optional<st
     // to print different messages for different verbosity levels. For now
     // we add some heuristics for detecting when we want to show the response.
     if (response && (response->size() < 1024 || response->find("<html>") != std::string::npos))
-        err.msg = HintFmt("%1%\n\nresponse body:\n\n%2%", Uncolored(err.msg.str()), chomp(*response));
+        hint = HintFmt("%1%\n\nresponse body:\n\n%2%", Uncolored(hint.str()), chomp(*response));
 }
 
 } // namespace nix

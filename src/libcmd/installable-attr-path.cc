@@ -64,7 +64,7 @@ DerivedPathsWithInfo InstallableAttrPath::toDerivedPaths()
     for (auto & packageInfo : packageInfos) {
         auto drvPath = packageInfo.queryDrvPath();
         if (!drvPath)
-            throw Error("'%s' is not a derivation", what());
+            throw UnstructuredError("'%s' is not a derivation", what());
 
         auto newOutputs = std::visit(
             overloaded{

@@ -77,10 +77,9 @@ static StringToken unescapeStr(char * const s, size_t length, std::function<Pos(
 static void requireExperimentalFeature(const ExperimentalFeature & feature, const Pos & pos)
 {
     if (!experimentalFeatureSettings.isEnabled(feature))
-        throw ParseError(ErrorInfo{
-            .msg = HintFmt("experimental Nix feature '%1%' is disabled; add '--extra-experimental-features %1%' to enable it", showExperimentalFeature(feature)),
-            .pos = pos,
-        });
+        throw ParseError(
+            ErrorInfo{.pos = pos},
+            HintFmt("experimental Nix feature '%1%' is disabled; add '--extra-experimental-features %1%' to enable it", showExperimentalFeature(feature)));
 }
 
 }
@@ -158,20 +157,18 @@ or          { return OR_KW; }
               if (numMay.has_value()) {
                   yylval->emplace<NixInt>(*numMay);
               } else {
-                  throw ParseError(ErrorInfo{
-                      .msg = HintFmt("invalid integer '%1%'", yytext),
-                      .pos = state->positions[CUR_POS],
-                  });
+                  throw ParseError(
+                      ErrorInfo{.pos = state->positions[CUR_POS]},
+                      HintFmt("invalid integer '%1%'", yytext));
               }
               return INT_LIT;
             }
 {FLOAT}     { errno = 0;
               yylval->emplace<NixFloat>(strtod(yytext, 0));
               if (errno != 0)
-                  throw ParseError(ErrorInfo{
-                      .msg = HintFmt("invalid float '%1%'", yytext),
-                      .pos = state->positions[CUR_POS],
-                  });
+                  throw ParseError(
+                      ErrorInfo{.pos = state->positions[CUR_POS]},
+                      HintFmt("invalid float '%1%'", yytext));
               return FLOAT_LIT;
             }
 
@@ -306,10 +303,9 @@ or          { return OR_KW; }
 
 <INPATH_SLASH>{ANY} |
 <INPATH_SLASH><<EOF>> {
-  throw ParseError(ErrorInfo{
-      .msg = HintFmt("path has a trailing slash"),
-      .pos = state->positions[CUR_POS],
-  });
+  throw ParseError(
+      ErrorInfo{.pos = state->positions[CUR_POS]},
+      HintFmt("path has a trailing slash"));
 }
 
 {SPATH}     { yylval->emplace<StringToken>(yytext, (size_t) yyleng); return SPATH; }

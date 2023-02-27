@@ -140,7 +140,7 @@ struct PostBuildHookState
     void complete()
     {
         if (int ret = pid.wait()) {
-            throw Error("program \"%s\" %s", hook, statusToString(ret));
+            throw UnstructuredError("program \"%s\" %s", hook, statusToString(ret));
         }
     }
 };
@@ -178,7 +178,7 @@ Goal::Co DerivationBuildingGoal::gaveUpOnSubstitution()
         if (worker.store.isValidPath(i))
             continue;
         if (!worker.settings.useSubstitutes)
-            throw Error(
+            throw UnstructuredError(
                 "dependency '%s' of '%s' does not exist, and substitution is disabled",
                 worker.store.printStorePath(i),
                 worker.store.printStorePath(drvPath));
@@ -777,7 +777,7 @@ Goal::Co DerivationBuildingGoal::buildWithHook(
         [&] {
             auto [allValid, validOutputs] = checkPathValidity(initialOutputs);
             if (!allValid)
-                throw Error("some outputs are unexpectedly invalid");
+                throw UnstructuredError("some outputs are unexpectedly invalid");
             return validOutputs;
         }();
 
@@ -1257,7 +1257,7 @@ HookReply DerivationBuildingGoal::tryBuildHook(const DerivationOptions<StorePath
         } else if (reply == "postpone")
             return rpPostpone;
         else if (reply != "accept")
-            throw Error("bad hook reply '%s'", reply);
+            throw UnstructuredError("bad hook reply '%s'", reply);
 
     } catch (SystemError & e) {
         if (e.is(std::errc::broken_pipe)) {

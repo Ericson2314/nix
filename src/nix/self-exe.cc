@@ -68,7 +68,7 @@ void runNixBin2(
 
     /* Intentionally don't do any sort of static guessing (i.e. looking up the compile-time NIX_BIN_DIR etc.). */
     if (!selfProgramPath)
-        throw Error("can't figure out the path to current executable to exec oneself");
+        throw UnstructuredError("can't figure out the path to current executable to exec oneself");
 
     try {
         runProgram2(

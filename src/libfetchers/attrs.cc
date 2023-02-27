@@ -28,7 +28,7 @@ Attrs jsonToAttrs(const nlohmann::json & json)
         else if (i.value().is_boolean())
             attrs.emplace(i.key(), Explicit<bool>{i.value().get<bool>()});
         else
-            throw Error("unsupported input attribute type in lock file");
+            throw UnstructuredError("unsupported input attribute type in lock file");
     }
 
     return attrs;
@@ -69,14 +69,14 @@ std::optional<std::string> maybeGetStrAttr(const Attrs & attrs, const std::strin
     auto resolved = forceAttr(i->second);
     if (auto v = std::get_if<std::string>(&resolved))
         return *v;
-    throw Error("input attribute '%s' is not a string %s", name, attrsToJSON(attrs).dump());
+    throw UnstructuredError("input attribute '%s' is not a string %s", name, attrsToJSON(attrs).dump());
 }
 
 std::string getStrAttr(const Attrs & attrs, const std::string & name)
 {
     auto s = maybeGetStrAttr(attrs, name);
     if (!s)
-        throw Error("input attribute '%s' is missing", name);
+        throw UnstructuredError("input attribute '%s' is missing", name);
     return *s;
 }
 
@@ -88,14 +88,14 @@ std::optional<uint64_t> maybeGetIntAttr(const Attrs & attrs, const std::string &
     auto resolved = forceAttr(i->second);
     if (auto v = std::get_if<uint64_t>(&resolved))
         return *v;
-    throw Error("input attribute '%s' is not an integer", name);
+    throw UnstructuredError("input attribute '%s' is not an integer", name);
 }
 
 uint64_t getIntAttr(const Attrs & attrs, const std::string & name)
 {
     auto s = maybeGetIntAttr(attrs, name);
     if (!s)
-        throw Error("input attribute '%s' is missing", name);
+        throw UnstructuredError("input attribute '%s' is missing", name);
     return *s;
 }
 
@@ -107,14 +107,14 @@ std::optional<bool> maybeGetBoolAttr(const Attrs & attrs, const std::string & na
     auto resolved = forceAttr(i->second);
     if (auto v = std::get_if<Explicit<bool>>(&resolved))
         return v->t;
-    throw Error("input attribute '%s' is not a Boolean", name);
+    throw UnstructuredError("input attribute '%s' is not a Boolean", name);
 }
 
 bool getBoolAttr(const Attrs & attrs, const std::string & name)
 {
     auto s = maybeGetBoolAttr(attrs, name);
     if (!s)
-        throw Error("input attribute '%s' is missing", name);
+        throw UnstructuredError("input attribute '%s' is missing", name);
     return *s;
 }
 

@@ -539,7 +539,7 @@ private:
     {
         if (options.ansiColors)
             output << ANSI_RED;
-        output << "«error: " << filterANSIEscapes(e.info().msg.str(), true) << "»";
+        output << "«error: " << filterANSIEscapes(e.message(), true) << "»";
         if (options.ansiColors)
             output << ANSI_NORMAL;
     }

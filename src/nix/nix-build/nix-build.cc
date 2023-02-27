@@ -89,7 +89,7 @@ static std::vector<std::string> shellwords(std::string_view s)
         }
     }
     if (st != sBegin)
-        throw Error("unterminated quote in shebang line");
+        throw UnstructuredError("unterminated quote in shebang line");
     cur.append(begin, it);
     res.push_back(cur);
     return res;
@@ -117,7 +117,7 @@ static SourcePath resolveShellExprPath(SourcePath path)
         if ((resolvedOrDir / "default.nix").pathExists()) {
             return resolvedOrDir / "default.nix";
         }
-        throw Error("neither '%s' nor '%s' found in '%s'", "shell.nix", "default.nix", resolvedOrDir);
+        throw UnstructuredError("neither '%s' nor '%s' found in '%s'", "shell.nix", "default.nix", resolvedOrDir);
     }
     return resolvedOrDir;
 }
@@ -360,7 +360,7 @@ static void main_nix_build(int argc, char ** argv)
 
             // Instead of letting it throw later, we throw here to give a more relevant error message
             if (isNixShell && !std::filesystem::exists("shell.nix") && !std::filesystem::exists("default.nix"))
-                throw Error(
+                throw UnstructuredError(
                     "no argument specified and no '%s' or '%s' file found in the working directory",
                     "shell.nix",
                     "default.nix");
@@ -480,7 +480,8 @@ static void main_nix_build(int argc, char ** argv)
 
                 auto drv = getDerivation(*state, v, false);
                 if (!drv)
-                    throw Error("the 'bashInteractive' attribute in <nixpkgs> did not evaluate to a derivation");
+                    throw UnstructuredError(
+                        "the 'bashInteractive' attribute in <nixpkgs> did not evaluate to a derivation");
 
                 auto bashDrv = drv->requireDrvPath();
                 pathsToBuild.push_back(
@@ -492,7 +493,7 @@ static void main_nix_build(int argc, char ** argv)
                 shellDrv = bashDrv;
 
             } catch (Error & e) {
-                logError(e.info());
+                logExError(e);
                 notice("uses bash from your environment");
                 shell = "bash";
             }
@@ -540,7 +541,8 @@ static void main_nix_build(int argc, char ** argv)
         if (shouldResolve(drv)) {
             auto resolvedDrv = tryResolve(drv, *store);
             if (!resolvedDrv)
-                throw Error("failed to resolve derivation '%s'", store->printStorePath(packageInfo.requireDrvPath()));
+                throw UnstructuredError(
+                    "failed to resolve derivation '%s'", store->printStorePath(packageInfo.requireDrvPath()));
             drv = unresolve(*resolvedDrv);
         }
 
@@ -689,7 +691,8 @@ static void main_nix_build(int argc, char ** argv)
 
             auto outputName = packageInfo.queryOutputName();
             if (outputName == "")
-                throw Error("derivation '%s' lacks an 'outputName' attribute", store->printStorePath(drvPath));
+                throw UnstructuredError(
+                    "derivation '%s' lacks an 'outputName' attribute", store->printStorePath(drvPath));
 
             pathsToBuild.push_back(
                 DerivedPath::Built{

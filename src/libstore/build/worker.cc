@@ -349,12 +349,12 @@ void Worker::run(const Goals & _topGoals)
             waitForInput();
         else if (awake.empty() && 0U == settings.maxBuildJobs) {
             if (Machine::parseConfig({nix::settings.thisSystem}, nix::settings.getWorkerSettings().builders).empty())
-                throw Error(
+                throw UnstructuredError(
                     "Unable to start any build; either increase '--max-jobs' or enable remote builds.\n"
                     "\n"
                     "For more information run 'man nix.conf' and search for '/machines'.");
             else
-                throw Error(
+                throw UnstructuredError(
                     "Unable to start any build; remote machines may not have all required system features.\n"
                     "\n"
                     "For more information run 'man nix.conf' and search for '/machines'.");

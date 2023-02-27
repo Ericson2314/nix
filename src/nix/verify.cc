@@ -151,7 +151,7 @@ struct CmdVerify : StorePathsCommand
                                 doSigs(info2->sigs);
                             } catch (InvalidPath &) {
                             } catch (Error & e) {
-                                logError(e.info());
+                                logExError(e);
                             }
                         }
 
@@ -169,7 +169,7 @@ struct CmdVerify : StorePathsCommand
                 done++;
 
             } catch (Error & e) {
-                logError(e.info());
+                logExError(e);
                 failed++;
             }
 

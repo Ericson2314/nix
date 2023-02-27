@@ -50,7 +50,7 @@ std::pair<std::filesystem::path, AutoDelete> setupBuildChroot(const BuildChrootP
         params.chownToBuilder(chrootRootDir / "etc");
 
     if (params.useUidRange && (!params.buildUser || params.buildUser->getUIDCount() < 65536))
-        throw Error(
+        throw UnstructuredError(
             "feature 'uid-range' requires the setting '%s' to be enabled",
             settings.getLocalSettings().autoAllocateUids.name);
 

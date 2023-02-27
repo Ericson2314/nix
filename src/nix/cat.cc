@@ -14,7 +14,7 @@ struct MixCat : virtual Args
     {
         auto st = accessor->lstat(path);
         if (st.type != SourceAccessor::Type::tRegular)
-            throw Error("path '%1%' is not a regular file", path.abs());
+            throw UnstructuredError("path '%1%' is not a regular file", path.abs());
         logger->stop();
 
         FdSink output{getStandardOutput()};
@@ -116,7 +116,7 @@ struct CmdCatNar : StoreCommand, MixCat
         parseDump(sink, source);
 
         if (!sink.found)
-            throw Error("NAR does not contain regular file '%1%'", path);
+            throw UnstructuredError("NAR does not contain regular file '%1%'", path);
     }
 };
 

@@ -148,7 +148,7 @@ ParsedURL ParsedS3URL::toHttpsUrl() const
         auto useVirtual = defaultVirtual ? style != S3AddressingStyle::Path : style == S3AddressingStyle::Virtual;
         if (useVirtual && hasDottedBucket) {
             if (style == S3AddressingStyle::Virtual)
-                throw Error(
+                throw UnstructuredError(
                     "bucket name '%s' contains a dot, which is incompatible with "
                     "virtual-hosted-style addressing (causes TLS certificate errors); "
                     "use 'addressing-style=path' or 'addressing-style=auto' instead",
@@ -191,7 +191,7 @@ ParsedURL ParsedS3URL::toHttpsUrl() const
                 // virtual-hosted-style only when explicitly requested (not for dotted buckets).
                 auto useVirtual = useVirtualForEndpoint(/* defaultVirtual = */ false);
                 if (useVirtual && auth.host.empty())
-                    throw Error(
+                    throw UnstructuredError(
                         "cannot use virtual-hosted-style addressing with endpoint '%s' "
                         "because it has no hostname; use 'addressing-style=path' instead",
                         auth.to_string());
@@ -212,7 +212,7 @@ ParsedURL ParsedS3URL::toHttpsUrl() const
                 // virtual-hosted-style only when explicitly requested (not for dotted buckets).
                 auto useVirtual = useVirtualForEndpoint(/* defaultVirtual = */ false);
                 if (useVirtual && (!endpointUrl.authority || endpointUrl.authority->host.empty()))
-                    throw Error(
+                    throw UnstructuredError(
                         "cannot use virtual-hosted-style addressing with endpoint '%s' "
                         "because it has no authority (hostname)",
                         endpointUrl.to_string());

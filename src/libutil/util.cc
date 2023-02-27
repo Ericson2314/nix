@@ -50,7 +50,7 @@ void initLibUtil()
         assert(caught);
 
         if (sodium_init() == -1)
-            throw Error("could not initialise libsodium");
+            throw UnstructuredError("could not initialise libsodium");
 
         /* Prevent OpenSSL from registering its atexit() handler
            (OPENSSL_cleanup()). If we exit() while other threads that use
@@ -65,7 +65,7 @@ void initLibUtil()
            use of OpenSSL, since only the first initialisation takes
            effect. */
         if (OPENSSL_init_crypto(OPENSSL_INIT_NO_ATEXIT, nullptr) != 1)
-            throw Error("could not initialise OpenSSL");
+            throw UnstructuredError("could not initialise OpenSSL");
 
 #ifdef _WIN32
         /* Winsock needs this once per process before any socket call; without
@@ -271,7 +271,7 @@ void ignoreExceptionInDestructor(Verbosity lvl)
         try {
             throw;
         } catch (Error & e) {
-            printMsg(lvl, ANSI_RED "error (ignored):" ANSI_NORMAL " %s", e.info().msg);
+            printMsg(lvl, ANSI_RED "error (ignored):" ANSI_NORMAL " %s", e.renderMessage());
         } catch (std::exception & e) {
             printMsg(lvl, ANSI_RED "error (ignored):" ANSI_NORMAL " %s", e.what());
         }
@@ -290,7 +290,7 @@ void ignoreExceptionExceptInterrupt(Verbosity lvl)
            cancellation. */
         throw;
     } catch (Error & e) {
-        printMsg(lvl, ANSI_RED "error (ignored):" ANSI_NORMAL " %s", e.info().msg);
+        printMsg(lvl, ANSI_RED "error (ignored):" ANSI_NORMAL " %s", e.renderMessage());
     } catch (std::exception & e) {
         printMsg(lvl, ANSI_RED "error (ignored):" ANSI_NORMAL " %s", e.what());
     }

@@ -108,7 +108,7 @@ static void flatten(const nlohmann::json & value, StringSet & res)
     else if (value.is_string())
         res.insert(value);
     else
-        throw Error("'exportReferencesGraph' value is not an array or a string");
+        throw UnstructuredError("'exportReferencesGraph' value is not an array or a string");
 }
 
 DerivationOptions<SingleDerivedPath> derivationOptionsFromStructuredAttrs(
@@ -309,12 +309,12 @@ DerivationOptions<SingleDerivedPath> derivationOptionsFromStructuredAttrs(
                     auto s = getOr(env, "exportReferencesGraph", "");
                     Strings ss = tokenizeString<Strings>(s);
                     if (ss.size() % 2 != 0)
-                        throw Error("odd number of tokens in 'exportReferencesGraph': '%1%'", s);
+                        throw UnstructuredError("odd number of tokens in 'exportReferencesGraph': '%1%'", s);
                     for (Strings::iterator i = ss.begin(); i != ss.end();) {
                         auto fileName = std::move(*i++);
                         static std::regex regex("[A-Za-z_][A-Za-z0-9_.-]*");
                         if (!std::regex_match(fileName, regex))
-                            throw Error("invalid file name '%s' in 'exportReferencesGraph'", fileName);
+                            throw UnstructuredError("invalid file name '%s' in 'exportReferencesGraph'", fileName);
 
                         auto & storePathS = *i++;
                         ret.insert_or_assign(std::move(fileName), std::set{parseSingleDerivedPath(storePathS)});
@@ -547,7 +547,7 @@ static nix::DerivationOptions<Inputs> derivationOptionsFromJson(const nlohmann::
             } else if (perOutputOpt && !forAllOutputsOpt) {
                 return static_cast<std::map<std::string, OutputChecks<Inputs>, std::less<>>>(*perOutputOpt);
             } else {
-                throw Error("Exactly one of 'perOutput' or 'forAllOutputs' is required");
+                throw UnstructuredError("Exactly one of 'perOutput' or 'forAllOutputs' is required");
             }
         }(),
 

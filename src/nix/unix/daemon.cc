@@ -230,7 +230,7 @@ static std::pair<TrustedFlag, std::optional<std::string>> authPeer(const unix::P
         trusted = Trusted;
 
     if ((!trusted && !matchUser(user, group, allowedUsers)) || group == settings.getLocalSettings().buildUsersGroup)
-        throw Error("user '%1%' is not allowed to connect to the Nix daemon", user.value_or("<unknown>"));
+        throw UnstructuredError("user '%1%' is not allowed to connect to the Nix daemon", user.value_or("<unknown>"));
 
     return {trusted, std::move(user)};
 }
@@ -267,10 +267,10 @@ static void daemonLoop(
         auto rootCgroup = linux::getRootCgroup();
         auto cgroupFS = linux::getCgroupFS();
         if (!cgroupFS)
-            throw Error("cannot determine the cgroups file system");
+            throw UnstructuredError("cannot determine the cgroups file system");
         auto rootCgroupPath = *cgroupFS / rootCgroup.rel();
         if (!pathExists(rootCgroupPath))
-            throw Error("expected cgroup directory %s", PathFmt(rootCgroupPath));
+            throw UnstructuredError("expected cgroup directory %s", PathFmt(rootCgroupPath));
         auto daemonCgroupPath = rootCgroupPath + "/nix-daemon";
         //  Create new sub-cgroup for the daemon.
         if (mkdir(daemonCgroupPath.c_str(), 0755) != 0 && errno != EEXIST)

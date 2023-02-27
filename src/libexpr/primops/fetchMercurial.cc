@@ -67,7 +67,7 @@ static void prim_fetchMercurial(EvalState & state, CallSite callSite, Value * co
     state.checkURI(url);
 
     if (state.settings.pureEval && !rev)
-        throw Error("in pure evaluation mode, 'fetchMercurial' requires a Mercurial revision");
+        throw UnstructuredError("in pure evaluation mode, 'fetchMercurial' requires a Mercurial revision");
 
     fetchers::Attrs attrs;
     attrs.insert_or_assign("type", "hg");

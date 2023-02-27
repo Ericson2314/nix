@@ -30,14 +30,14 @@ static void runFetchClosureWithRewrite(
     if (!toPathMaybe || !state.store->isValidPath(*toPathMaybe)) {
         auto rewrittenPath = makeContentAddressed(fromStore, *state.store, fromPath);
         if (toPathMaybe && *toPathMaybe != rewrittenPath)
-            throw Error(
+            throw UnstructuredError(
                 {.msg = HintFmt(
                      "rewriting '%s' to content-addressed form yielded '%s', while '%s' was expected",
                      state.store->printStorePath(fromPath),
                      state.store->printStorePath(rewrittenPath),
                      state.store->printStorePath(*toPathMaybe))});
         if (!toPathMaybe)
-            throw Error(
+            throw UnstructuredError(
                 {.msg = HintFmt(
                      "rewriting '%s' to content-addressed form yielded '%s'\n"
                      "Use this value for the 'toPath' attribute passed to 'fetchClosure'",
@@ -54,7 +54,7 @@ static void runFetchClosureWithRewrite(
     if (!resultInfo->isContentAddressed(*state.store)) {
         // We don't perform the rewriting when outPath already exists, as an optimisation.
         // However, we can quickly detect a mistake if the toPath is input addressed.
-        throw Error(
+        throw UnstructuredError(
             {.msg = HintFmt(
                  "The 'toPath' value '%s' is input-addressed, so it can't possibly be the result of rewriting to a content-addressed path.\n\n"
                  "Set 'toPath' to an empty string to make Nix report the correct content-addressed path.",
@@ -80,7 +80,7 @@ runFetchClosureWithContentAddressedPath(EvalState & state, Store & fromStore, co
     auto info = state.store->queryPathInfo(fromPath);
 
     if (!info->isContentAddressed(*state.store)) {
-        throw Error(
+        throw UnstructuredError(
             {.msg = HintFmt(
                  "The 'fromPath' value '%s' is input-addressed, but 'inputAddressed' is set to 'false' (default).\n\n"
                  "If you do intend to fetch an input-addressed store path, add\n\n"
@@ -109,7 +109,7 @@ runFetchClosureWithInputAddressedPath(EvalState & state, Store & fromStore, cons
     auto info = state.store->queryPathInfo(fromPath);
 
     if (info->isContentAddressed(*state.store)) {
-        throw Error(
+        throw UnstructuredError(
             {.msg = HintFmt(
                  "The store object referred to by 'fromPath' at '%s' is not input-addressed, but 'inputAddressed' is set to 'true'.\n\n"
                  "Remove the 'inputAddressed' attribute (it defaults to 'false') to expect 'fromPath' to be content-addressed",
@@ -161,17 +161,18 @@ static void prim_fetchClosure(EvalState & state, CallSite callSite, Value * cons
             inputAddressedMaybe = state.forceBool(*attr.value, attr.pos, attrHint());
 
         else
-            throw Error({.msg = HintFmt("attribute '%s' isn't supported in call to 'fetchClosure'", attrName)});
+            throw UnstructuredError(
+                {.msg = HintFmt("attribute '%s' isn't supported in call to 'fetchClosure'", attrName)});
     }
 
     if (!fromPath)
-        throw Error({.msg = HintFmt("attribute '%s' is missing in call to 'fetchClosure'", "fromPath")});
+        throw UnstructuredError({.msg = HintFmt("attribute '%s' is missing in call to 'fetchClosure'", "fromPath")});
 
     bool inputAddressed = inputAddressedMaybe.value_or(false);
 
     if (inputAddressed) {
         if (toPath)
-            throw Error(
+            throw UnstructuredError(
                 {.msg = HintFmt(
                      "attribute '%s' is set to true, but '%s' is also set. Please remove one of them",
                      "inputAddressed",
@@ -179,7 +180,7 @@ static void prim_fetchClosure(EvalState & state, CallSite callSite, Value * cons
     }
 
     if (!fromStoreUrl)
-        throw Error({.msg = HintFmt("attribute '%s' is missing in call to 'fetchClosure'", "fromStore")});
+        throw UnstructuredError({.msg = HintFmt("attribute '%s' is missing in call to 'fetchClosure'", "fromStore")});
 
     auto storeRef = StoreReference::parse(*fromStoreUrl);
 
@@ -189,12 +190,13 @@ static void prim_fetchClosure(EvalState & state, CallSite callSite, Value * cons
                    || (specified->scheme != "http" && specified->scheme != "https"
                        && !(getEnv("_NIX_IN_TEST").has_value() && specified->scheme == "file"));
         }())
-        throw Error({
+        throw UnstructuredError({
             .msg = HintFmt("'fetchClosure' only supports http:// and https:// stores"),
         });
 
     if (!storeRef.params.empty())
-        throw Error({.msg = HintFmt("'fetchClosure' does not support URL query parameters (in '%s')", *fromStoreUrl)});
+        throw UnstructuredError(
+            {.msg = HintFmt("'fetchClosure' does not support URL query parameters (in '%s')", *fromStoreUrl)});
 
     auto fromStore = openStore(std::move(storeRef));
 

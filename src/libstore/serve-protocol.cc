@@ -35,7 +35,7 @@ BuildResult ServeProto::Serialise<BuildResult>::read(const StoreDirConfig & stor
         for (auto & [output, realisation] : ServeProto::Serialise<StringMap>::read(store, conn)) {
             size_t n = output.find("!");
             if (n == output.npos)
-                throw Error("Invalid derivation output id %s", output);
+                throw UnstructuredError("Invalid derivation output id %s", output);
             success.builtOutputs.insert_or_assign(
                 output.substr(n + 1),
                 UnkeyedRealisation{
@@ -185,7 +185,7 @@ void ServeProto::Serialise<ServeProto::BuildOptions>::write(
 UnkeyedRealisation ServeProto::Serialise<UnkeyedRealisation>::read(const StoreDirConfig & store, ReadConn conn)
 {
     if (conn.version < ServeProto::Version{2, 8}) {
-        throw Error(
+        throw UnstructuredError(
             "serve protocol %d.%d is too old (< 2.8) to support content-addressing derivations",
             conn.version.major,
             conn.version.minor);
@@ -204,7 +204,7 @@ void ServeProto::Serialise<UnkeyedRealisation>::write(
     const StoreDirConfig & store, WriteConn conn, const UnkeyedRealisation & info)
 {
     if (conn.version < ServeProto::Version{2, 8}) {
-        throw Error(
+        throw UnstructuredError(
             "serve protocol %d.%d is too old (< 2.8) to support content-addressing derivations",
             conn.version.major,
             conn.version.minor);
@@ -216,7 +216,7 @@ void ServeProto::Serialise<UnkeyedRealisation>::write(
 DrvOutput ServeProto::Serialise<DrvOutput>::read(const StoreDirConfig & store, ReadConn conn)
 {
     if (conn.version < ServeProto::Version{2, 8}) {
-        throw Error(
+        throw UnstructuredError(
             "serve protocol %d.%d is too old (< 2.8) to support content-addressing derivations",
             conn.version.major,
             conn.version.minor);
@@ -234,7 +234,7 @@ DrvOutput ServeProto::Serialise<DrvOutput>::read(const StoreDirConfig & store, R
 void ServeProto::Serialise<DrvOutput>::write(const StoreDirConfig & store, WriteConn conn, const DrvOutput & info)
 {
     if (conn.version < ServeProto::Version{2, 8}) {
-        throw Error(
+        throw UnstructuredError(
             "serve protocol %d.%d is too old (< 2.8) to support content-addressing derivations",
             conn.version.major,
             conn.version.minor);

@@ -86,7 +86,7 @@ findAlongAttrPath(EvalState & state, const std::string & attrPath, const Binding
                         showType(*v))
                     .debugThrow();
             if (attr.empty())
-                throw Error("empty attribute name in selection path '%1%'", attrPath);
+                throw UnstructuredError("empty attribute name in selection path '%1%'", attrPath);
 
             auto a = v->attrs()->get(state.symbols.create(attr));
             if (!a) {

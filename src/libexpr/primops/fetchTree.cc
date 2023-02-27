@@ -323,7 +323,7 @@ static void fetchTree(
         input.attrs.insert_or_assign("__final", Explicit<bool>(true));
     } else {
         if (input.isFinal())
-            throw Error("input '%s' is not allowed to use the '__final' attribute", input.to_string());
+            throw UnstructuredError("input '%s' is not allowed to use the '__final' attribute", input.to_string());
     }
 
     auto cachedInput =

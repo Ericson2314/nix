@@ -365,7 +365,7 @@ void from_json(const nlohmann::json & j, ExperimentalFeature & feature)
     if (parsed.has_value())
         feature = *parsed;
     else
-        throw Error("Unknown experimental feature '%s' in JSON input", input);
+        throw UnstructuredError("Unknown experimental feature '%s' in JSON input", input);
 }
 
 } // namespace nix

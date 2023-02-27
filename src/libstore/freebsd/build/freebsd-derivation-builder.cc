@@ -429,7 +429,7 @@ void ChrootFreeBSDDerivationBuilder::startChild()
 
         /* TODO: Capture the error from the helper? */
         if (auto status = helper.wait(); !statusOk(status)) {
-            throw Error("failed to configure loopback address: %s", statusToString(status));
+            throw UnstructuredError("failed to configure loopback address: %s", statusToString(status));
         }
     } else {
         jid = jail_setv(

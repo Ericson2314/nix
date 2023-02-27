@@ -69,7 +69,7 @@ void execProgramInStore(
     auto store2 = store.dynamic_pointer_cast<LocalFSStore>();
 
     if (!store2)
-        throw Error(
+        throw UnstructuredError(
             "store '%s' is not a local store so it does not support command execution",
             store->config.getHumanReadableURI());
 
@@ -258,7 +258,7 @@ void chrootHelper(int argc, char ** argv)
     throw SysError("unable to exec '%s'", cmd);
 
 #else
-    throw Error("mounting the Nix store on '%s' is not supported on this platform", storeDir);
+    throw UnstructuredError("mounting the Nix store on '%s' is not supported on this platform", storeDir);
 #endif
 }
 

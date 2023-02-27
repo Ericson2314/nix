@@ -14,10 +14,10 @@ ServeProto::Version ServeProto::BasicClientConnection::handshake(
 
     unsigned int magic = readInt(from);
     if (magic != SERVE_MAGIC_2)
-        throw Error("'nix-store --serve' protocol mismatch from '%s'", host);
+        throw UnstructuredError("'nix-store --serve' protocol mismatch from '%s'", host);
     auto remoteVersion = ServeProto::Version::fromWire(readInt(from));
     if (remoteVersion.major != 2 || remoteVersion < ServeProto::Version{2, 5})
-        throw Error("unsupported 'nix-store --serve' protocol version on '%s'", host);
+        throw UnstructuredError("unsupported 'nix-store --serve' protocol version on '%s'", host);
     return std::min(remoteVersion, localVersion);
 }
 
@@ -26,7 +26,7 @@ ServeProto::BasicServerConnection::handshake(BufferedSink & to, Source & from, S
 {
     unsigned int magic = readInt(from);
     if (magic != SERVE_MAGIC_1)
-        throw Error("protocol mismatch");
+        throw UnstructuredError("protocol mismatch");
     to << SERVE_MAGIC_2 << localVersion.toWire();
     to.flush();
     auto remoteVersion = ServeProto::Version::fromWire(readInt(from));
@@ -101,7 +101,7 @@ void ServeProto::BasicClientConnection::importPaths(const StoreDirConfig & store
     to.flush();
 
     if (readInt(from) != 1)
-        throw Error("remote machine failed to import closure");
+        throw UnstructuredError("remote machine failed to import closure");
 }
 
 } // namespace nix

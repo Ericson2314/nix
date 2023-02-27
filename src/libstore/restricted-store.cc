@@ -81,7 +81,7 @@ public:
 
     std::optional<StorePath> queryPathFromHashPart(const std::string & hashPart) override
     {
-        throw Error("queryPathFromHashPart");
+        throw UnstructuredError("queryPathFromHashPart");
     }
 
     StorePath addToStore(
@@ -93,7 +93,7 @@ public:
         PathFilter & filter,
         RepairFlag repair) override
     {
-        throw Error("addToStore");
+        throw UnstructuredError("addToStore");
     }
 
     void addToStore(
@@ -283,7 +283,7 @@ void RestrictedStore::registerDrvOutputUnchecked(const Realisation & info)
 // XXX: This should probably be allowed as a no-op if the realisation
 // corresponds to an allowed derivation
 {
-    throw Error("registerDrvOutput");
+    throw UnstructuredError("registerDrvOutput");
 }
 
 void RestrictedStore::submitOutput(const SingleDerivedPath & path, const OutputName & output)
@@ -326,7 +326,7 @@ std::vector<KeyedBuildResult>
 RestrictedBuilder::buildPathsWithResults(const std::vector<DerivedPath> & paths, BuildMode buildMode)
 {
     if (buildMode != bmNormal)
-        throw Error("unsupported build mode");
+        throw UnstructuredError("unsupported build mode");
 
     for (auto & req : paths) {
         if (!goal.isAllowed(req))

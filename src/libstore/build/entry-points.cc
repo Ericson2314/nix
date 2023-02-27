@@ -51,7 +51,7 @@ void Worker::buildPaths(const std::vector<DerivedPath> & reqs, BuildMode buildMo
     for (auto & i : goals) {
         if (auto * f = i->buildResult.tryGetFailure()) {
             if (failure)
-                logError(f->info());
+                logExError(*f);
             else
                 failure = f;
         }
@@ -69,8 +69,8 @@ void Worker::buildPaths(const std::vector<DerivedPath> & reqs, BuildMode buildMo
     } else if (!failed.empty()) {
         auto exitStatus = exitStatusFlags.failingExitStatus();
         if (failure)
-            logError(failure->info());
-        throw Error(exitStatus, "build of %s failed", concatStringsSep(", ", quoteStrings(failed)));
+            logExError(*failure);
+        throw UnstructuredError(exitStatus, "build of %s failed", concatStringsSep(", ", quoteStrings(failed)));
     }
 }
 
@@ -136,7 +136,8 @@ void Worker::ensurePath(const StorePath & path)
     if (goal->exitCode != Goal::ecSuccess) {
         auto exitStatus = exitStatusFlags.failingExitStatus();
         goal->buildResult.tryThrowBuildError(exitStatus);
-        throw Error(exitStatus, "path '%s' does not exist and cannot be created", store.printStorePath(path));
+        throw UnstructuredError(
+            exitStatus, "path '%s' does not exist and cannot be created", store.printStorePath(path));
     }
 }
 
@@ -162,7 +163,8 @@ void Worker::repairPath(const StorePath & path)
                 bmRepair));
             run(goals);
         } else
-            throw Error(exitStatusFlags.failingExitStatus(), "cannot repair path '%s'", store.printStorePath(path));
+            throw UnstructuredError(
+                exitStatusFlags.failingExitStatus(), "cannot repair path '%s'", store.printStorePath(path));
     }
 }
 

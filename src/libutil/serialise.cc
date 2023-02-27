@@ -309,7 +309,7 @@ bool FdSource::hasData()
 void FdSource::restart()
 {
     if (!isSeekable)
-        throw Error("can't seek to the start of a file");
+        throw UnstructuredError("can't seek to the start of a file");
     buffer.reset();
     read = bufPosIn = bufPosOut = 0;
     if (lseek(fd, 0, SEEK_SET) == -1)
@@ -333,7 +333,7 @@ void FdSource::skip(size_t len)
     /* If we can, seek forward in the file to skip the rest. */
     if (isSeekable && len) {
         if (len > static_cast<size_t>(std::numeric_limits<off_t>::max()))
-            throw Error("cannot skip %d bytes: exceeds maximum file offset", len);
+            throw UnstructuredError("cannot skip %d bytes: exceeds maximum file offset", len);
         if (lseek(fd, len, SEEK_CUR) == -1) {
             if (errno == ESPIPE)
                 isSeekable = false;
@@ -566,7 +566,7 @@ Sink & operator<<(Sink & sink, const Error & ex)
 {
     auto & info = ex.info();
     sink << "Error" << std::to_underlying(info.level) << "Error" // removed
-         << info.msg.str() << 0                                  // FIXME: info.errPos
+         << ex.message() << 0                                    // FIXME: info.errPos
          << info.traces.size();
     for (auto & trace : info.traces) {
         sink << 0; // FIXME: trace.pos
@@ -643,7 +643,7 @@ T readStrings(Source & source)
 template Strings readStrings(Source & source);
 template StringSet readStrings(Source & source);
 
-Error readError(Source & source)
+UnstructuredError readError(Source & source)
 {
     auto type = readString(source);
     if (type != "Error")
@@ -653,7 +653,6 @@ Error readError(Source & source)
     auto msg = readString(source);
     ErrorInfo info{
         .level = level,
-        .msg = HintFmt(msg),
     };
     auto havePos = readNum<size_t>(source);
     if (havePos != 0)
@@ -665,7 +664,7 @@ Error readError(Source & source)
             throw SerialisationError("deserializing error positions is not supported");
         info.traces.push_back(Trace{.hint = HintFmt(readString(source))});
     }
-    return Error(std::move(info));
+    return UnstructuredError(std::move(info), HintFmt(msg));
 }
 
 void StringSink::operator()(std::string_view data)

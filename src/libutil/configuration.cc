@@ -157,7 +157,7 @@ static void parseConfigFiles(
                     // TODO: Do we actually want to ignore this? Or is it better to fail?
                 }
             } else if (!ignoreMissing) {
-                throw Error("file %s included from %s not found", PathFmt(p), PathFmt(path));
+                throw UnstructuredError("file %s included from %s not found", PathFmt(p), PathFmt(path));
             }
             continue;
         }

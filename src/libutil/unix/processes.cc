@@ -110,7 +110,7 @@ int Pid::kill(bool allowInterrupts)
 #if defined(__FreeBSD__) || defined(__APPLE__)
         if (errno != EPERM || ::kill(pid, 0) != 0)
 #endif
-            logError(SysError("killing process %d", pid).info());
+            logExError(SysError("killing process %d", pid));
     }
 
     int ret = wait(allowInterrupts);
@@ -207,7 +207,7 @@ void killUser(uid_t uid)
 
     int status = pid.wait();
     if (status != 0)
-        throw Error("cannot kill processes for uid '%1%': %2%", uid, statusToString(status));
+        throw UnstructuredError("cannot kill processes for uid '%1%': %2%", uid, statusToString(status));
 
     /* !!! We should really do some check to make sure that there are
        no processes left running under `uid', but there is no portable
@@ -285,7 +285,7 @@ pid_t startProcess(fun<void()> processMain, const ProcessOptions & options)
 
         pid = clone(childEntry, stack + stackSize, options.cloneFlags | SIGCHLD, &wrapper);
 #else
-        throw Error("clone flags are only supported on Linux");
+        throw UnstructuredError("clone flags are only supported on Linux");
 #endif
     } else
         pid = doFork(wrapper);

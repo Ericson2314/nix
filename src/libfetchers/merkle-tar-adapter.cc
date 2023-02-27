@@ -182,13 +182,13 @@ struct TarAdapterImpl : merkle::TarAdapter
             for (auto & name : *parent) {
                 auto * dir = std::get_if<Directory>(cur);
                 if (!dir)
-                    throw Error("parent of '%s' is not a directory", path);
+                    throw UnstructuredError("parent of '%s' is not a directory", path);
                 cur = &dir->children.emplace(std::string(name), Directory{}).first->second;
             }
 
             auto * dir = std::get_if<Directory>(cur);
             if (!dir)
-                throw Error("parent of '%s' is not a directory", path);
+                throw UnstructuredError("parent of '%s' is not a directory", path);
 
             std::string name(*path.baseName());
             auto i = dir->children.find(name);
@@ -206,7 +206,7 @@ struct TarAdapterImpl : merkle::TarAdapter
                 return;
 
             if (!prev->children.empty())
-                throw Error("cannot create '%s', conflicting non-empty directory", path);
+                throw UnstructuredError("cannot create '%s', conflicting non-empty directory", path);
         }
 
         if (auto i = hardLinked.find(path); i != hardLinked.end()) {
@@ -266,11 +266,11 @@ struct TarAdapterImpl : merkle::TarAdapter
         const auto * child = lookup(target);
 
         if (!child)
-            throw Error("target does not exist");
+            throw UnstructuredError("target does not exist");
 
         std::visit(
             overloaded{
-                [&](const Directory &) { throw Error("target is a directory"); },
+                [&](const Directory &) { throw UnstructuredError("target is a directory"); },
                 /* Share the target's hash slot, rather than copying the
                    hash out of it --- which is also why a link made
                    before the target has finished being written works. */

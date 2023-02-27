@@ -102,7 +102,7 @@ void mainWrapped(int argc, char ** argv)
     writeFull(toHelper.writeSide.get(), "0\n");
 
     if (!statusOk(helper.wait()))
-        throw Error("adding uids/gids to namespace");
+        throw UnstructuredError("adding uids/gids to namespace");
 
     if (setresuid(0, 0, 0) < 0)
         throw SysError("setting uid");

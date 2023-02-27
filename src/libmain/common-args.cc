@@ -52,7 +52,7 @@ MixCommonArgs::MixCommonArgs(const std::string & programName)
                 globalConfig.set(name, value);
             } catch (UsageError & e) {
                 if (!getRoot().completions)
-                    logWarning(e.info());
+                    logExWarning(e);
             }
         }},
         .completer =

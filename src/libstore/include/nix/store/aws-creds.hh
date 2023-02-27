@@ -34,7 +34,7 @@ struct AwsCredentials
     }
 };
 
-class AwsAuthError final : public CloneableError<AwsAuthError, Error>
+class AwsAuthError final : public CloneableError<AwsAuthError, UnstructuredError>
 {
 private:
     void anchor() override;

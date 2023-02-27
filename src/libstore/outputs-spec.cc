@@ -59,7 +59,7 @@ std::pair<std::string_view, ExtendedOutputsSpec> ExtendedOutputsSpec::parse(std:
 {
     std::optional spec = parseOpt(s);
     if (!spec)
-        throw Error("invalid extended outputs specifier '%s'", s);
+        throw UnstructuredError("invalid extended outputs specifier '%s'", s);
     return *spec;
 }
 

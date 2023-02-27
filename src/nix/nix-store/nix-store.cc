@@ -55,7 +55,7 @@ ref<LocalStore> ensureLocalStore()
 {
     auto store2 = std::dynamic_pointer_cast<LocalStore>(store);
     if (!store2)
-        throw Error("you don't have sufficient rights to use this command");
+        throw UnstructuredError("you don't have sufficient rights to use this command");
     return ref<LocalStore>(store2);
 }
 
@@ -65,7 +65,7 @@ static StorePath useDeriver(const StorePath & path)
         return path;
     auto info = store->queryPathInfo(path);
     if (!info->deriver)
-        throw Error("deriver of path '%s' is not known", store->printStorePath(path));
+        throw UnstructuredError("deriver of path '%s' is not known", store->printStorePath(path));
     return *info->deriver;
 }
 
@@ -93,7 +93,8 @@ static std::set<std::filesystem::path> realisePath(StorePathWithOutputs path, bo
             /* Match outputs of a store path with outputs of the derivation that produces it. */
             auto i = drv.outputs.find(j);
             if (i == drv.outputs.end())
-                throw Error("derivation '%s' does not have an output named '%s'", store2->printStorePath(path.path), j);
+                throw UnstructuredError(
+                    "derivation '%s' does not have an output named '%s'", store2->printStorePath(path.path), j);
             auto outPath = outputPaths.at(i->first);
             std::filesystem::path retPath = store->printStorePath(outPath);
             if (store2) {
@@ -117,7 +118,7 @@ static std::set<std::filesystem::path> realisePath(StorePathWithOutputs path, bo
         if (build)
             store->getBuilder()->ensurePath(path.path);
         else if (!store->isValidPath(path.path))
-            throw Error("path '%s' does not exist and cannot be created", store->printStorePath(path.path));
+            throw UnstructuredError("path '%s' does not exist and cannot be created", store->printStorePath(path.path));
         if (store2) {
             if (gcRoot == "")
                 printGCWarning();
@@ -444,7 +445,7 @@ static void opQuery(Strings opFlags, Strings opArgs)
             Derivation drv = store->derivationFromPath(path);
             StringPairs::iterator j = drv.env.find(bindingName);
             if (j == drv.env.end())
-                throw Error(
+                throw UnstructuredError(
                     "derivation '%s' has no environment binding named '%s'", store->printStorePath(path), bindingName);
             std::cout << fmt("%s\n", j->second);
         }
@@ -552,7 +553,7 @@ static void opReadLog(Strings opFlags, Strings opArgs)
         auto path = logStore.followLinksToStorePath(i);
         auto log = logStore.getBuildLog(path);
         if (!log)
-            throw Error("build log of derivation '%s' is not available", logStore.printStorePath(path));
+            throw UnstructuredError("build log of derivation '%s' is not available", logStore.printStorePath(path));
         std::cout << *log;
     }
 }
@@ -651,7 +652,7 @@ static void opCheckValidity(Strings opFlags, Strings opArgs)
             if (printInvalid)
                 std::cout << fmt("%s\n", store->printStorePath(path));
             else
-                throw Error("path '%s' is not valid", store->printStorePath(path));
+                throw UnstructuredError("path '%s' is not valid", store->printStorePath(path));
         }
     }
 }
@@ -925,7 +926,7 @@ static void opServe(Strings opFlags, Strings opArgs)
             settings.getWorkerSettings().maxLogSize = options.maxLogSize;
         if (clientVersion >= ServeProto::Version{2, 3}) {
             if (options.nrRepeats != 0) {
-                throw Error("client requested repeating builds, but this is not currently implemented");
+                throw UnstructuredError("client requested repeating builds, but this is not currently implemented");
             }
             // Ignore 'options.enforceDeterminism'.
             //
@@ -988,7 +989,7 @@ static void opServe(Strings opFlags, Strings opArgs)
 
         case ServeProto::Command::ImportPaths: {
             if (!writeAllowed)
-                throw Error("importing paths is not allowed");
+                throw UnstructuredError("importing paths is not allowed");
             // FIXME: should we skip sig checking?
             importPaths(*store, in, NoCheckSigs);
             // indicate success
@@ -999,7 +1000,7 @@ static void opServe(Strings opFlags, Strings opArgs)
         case ServeProto::Command::BuildPaths: {
 
             if (!writeAllowed)
-                throw Error("building paths is not allowed");
+                throw UnstructuredError("building paths is not allowed");
 
             std::vector<StorePathWithOutputs> paths;
             for (auto & s : readStrings<Strings>(in))
@@ -1023,7 +1024,7 @@ static void opServe(Strings opFlags, Strings opArgs)
         case ServeProto::Command::BuildDerivation: { /* Used by hydra-queue-runner. */
 
             if (!writeAllowed)
-                throw Error("building paths is not allowed");
+                throw UnstructuredError("building paths is not allowed");
 
             auto drvPath = store->parseStorePath(readString(in));
             BasicDerivation drv;
@@ -1051,7 +1052,7 @@ static void opServe(Strings opFlags, Strings opArgs)
 
         case ServeProto::Command::AddToStoreNar: {
             if (!writeAllowed)
-                throw Error("importing paths is not allowed");
+                throw UnstructuredError("importing paths is not allowed");
 
             auto path = readString(in);
             auto deriver = readString(in);
@@ -1070,7 +1071,7 @@ static void opServe(Strings opFlags, Strings opArgs)
             info.ca = ContentAddress::parseOpt(readString(in));
 
             if (info.narSize == 0)
-                throw Error("narInfo is too old and missing the narSize field");
+                throw UnstructuredError("narInfo is too old and missing the narSize field");
 
             SizedSource sizedSource(in, info.narSize);
 
@@ -1085,7 +1086,7 @@ static void opServe(Strings opFlags, Strings opArgs)
         }
 
         default:
-            throw Error("unknown serve command %1%", cmd);
+            throw UnstructuredError("unknown serve command %1%", cmd);
         }
 
         out.flush();

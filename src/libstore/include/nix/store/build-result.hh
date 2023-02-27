@@ -58,7 +58,7 @@ enum struct BuildResultFailureStatus : uint8_t {
  * This is both an exception type (inherits from Error) and serves as
  * the failure variant in BuildResult::inner.
  */
-class BuildError : public CloneableError<BuildError, Error>
+class BuildError : public CloneableError<BuildError, UnstructuredError>
 {
     void anchor() override;
 

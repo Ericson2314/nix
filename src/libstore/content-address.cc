@@ -275,7 +275,7 @@ ContentAddressWithReferences::fromParts(ContentAddressMethod method, Hash hash, 
     switch (method.raw) {
     case ContentAddressMethod::Raw::Text:
         if (refs.self)
-            throw Error("self-reference not allowed with text hashing");
+            throw UnstructuredError("self-reference not allowed with text hashing");
         return TextInfo{
             .hash = std::move(hash),
             .references = std::move(refs.others),

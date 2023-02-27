@@ -66,7 +66,7 @@ static bool inputMasked(
                     /* Put each one in with a single "out" output.. */
                     const auto h = get(outputHashes, outputName);
                     if (!h)
-                        throw Error("no hash for output '%s' of derivation '%s'", outputName, drvName);
+                        throw UnstructuredError("no hash for output '%s' of derivation '%s'", outputName, drvName);
                     drvInputs[*h].insert("out");
                 }
                 return false;

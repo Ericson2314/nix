@@ -181,7 +181,7 @@ struct BuildEnvironment
         if (auto str = std::get_if<String>(&value))
             return str->value;
         else
-            throw Error("bash variable is not a string");
+            throw UnstructuredError("bash variable is not a string");
     }
 
     static Associative getAssociative(const Value & value)
@@ -189,7 +189,7 @@ struct BuildEnvironment
         if (auto assoc = std::get_if<Associative>(&value))
             return *assoc;
         else
-            throw Error("bash variable is not an associative array");
+            throw UnstructuredError("bash variable is not an associative array");
     }
 
     static Array getStrings(const Value & value)
@@ -203,7 +203,7 @@ struct BuildEnvironment
             std::for_each(assoc->begin(), assoc->end(), [&](auto & n) { assocKeys.push_back(n.first); });
             return assocKeys;
         } else
-            throw Error("bash variable is not a string or array");
+            throw UnstructuredError("bash variable is not a string or array");
     }
 
     bool operator==(const BuildEnvironment & other) const
@@ -237,7 +237,7 @@ static StorePath getDerivationEnvironment(ref<Store> store, ref<Store> evalStore
 
     auto builder = baseNameOf(drv.builder);
     if (builder != "bash")
-        throw Error("'nix develop' only works on derivations that use 'bash' as their builder");
+        throw UnstructuredError("'nix develop' only works on derivations that use 'bash' as their builder");
 
     auto getEnvShPath = ({
         StringSource source{std::string_view(getEnvSh, sizeof(getEnvSh))};
@@ -306,7 +306,7 @@ static StorePath getDerivationEnvironment(ref<Store> store, ref<Store> evalStore
             return path;
     }
 
-    throw Error("get-env.sh failed to produce an environment");
+    throw UnstructuredError("get-env.sh failed to produce an environment");
 }
 
 struct Common : InstallableCommand, MixProfile
@@ -383,7 +383,7 @@ struct Common : InstallableCommand, MixProfile
         /* Substitute occurrences of output paths. */
         auto outputs = buildEnvironment.vars.find("outputs");
         if (outputs == buildEnvironment.vars.end())
-            throw Error("derivation does not have an 'outputs' attribute");
+            throw UnstructuredError("derivation does not have an 'outputs' attribute");
 
         StringMap rewrites;
         if (buildEnvironment.providesStructuredAttrs()) {
@@ -482,7 +482,7 @@ struct Common : InstallableCommand, MixProfile
             auto drvs = Installable::toDerivations(store, {installable});
 
             if (drvs.size() != 1)
-                throw Error(
+                throw UnstructuredError(
                     "'%s' needs to evaluate to a single derivation, but it evaluated to %d derivations",
                     installable->what(),
                     drvs.size());
@@ -674,7 +674,7 @@ struct CmdDevelop : Common, MixEnvironment
             }
 
             if (!foundInteractive)
-                throw Error("package 'nixpkgs#bashInteractive' does not provide a 'bin/bash'");
+                throw UnstructuredError("package 'nixpkgs#bashInteractive' does not provide a 'bin/bash'");
 
         } catch (Error &) {
             ignoreExceptionExceptInterrupt();

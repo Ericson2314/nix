@@ -23,7 +23,7 @@ static void exportPath(Store & store, const StorePath & path, Sink & sink)
        Don't complain if the stored hash is zero (unknown). */
     Hash hash = hashSink.currentHash().hash;
     if (hash != info->narHash && info->narHash != Hash(info->narHash.algo))
-        throw Error(
+        throw UnstructuredError(
             "hash of path '%s' has changed from '%s' to '%s'!",
             store.printStorePath(path),
             info->narHash.to_string(HashFormat::Nix32, true),
@@ -54,7 +54,7 @@ StorePaths importPaths(Store & store, Source & source, CheckSigsFlag checkSigs)
         if (n == 0)
             break;
         if (n != 1)
-            throw Error("input doesn't look like something created by 'nix-store --export'");
+            throw UnstructuredError("input doesn't look like something created by 'nix-store --export'");
 
         /* Extract the NAR from the source. */
         StringSink saved;
@@ -64,7 +64,7 @@ StorePaths importPaths(Store & store, Source & source, CheckSigsFlag checkSigs)
 
         uint32_t magic = readInt(source);
         if (magic != exportMagic)
-            throw Error("Nix archive cannot be imported; wrong format");
+            throw UnstructuredError("Nix archive cannot be imported; wrong format");
 
         auto path = store.parseStorePath(readString(source));
 

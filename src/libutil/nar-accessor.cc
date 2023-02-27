@@ -28,7 +28,7 @@ public:
         }()}
         , getNarBytes{[nar = std::move(nar)](uint64_t offset, uint64_t length, Sink & sink) {
             if (offset > nar.size() || length > nar.size() - offset)
-                throw Error(
+                throw UnstructuredError(
                     "reading invalid NAR bytes range: requested %1% bytes at offset %2%, but NAR has size %3%",
                     length,
                     offset,
@@ -71,7 +71,7 @@ public:
     {
         auto result = find(path);
         if (!result)
-            throw Error("NAR file does not contain path '%1%'", path);
+            throw UnstructuredError("NAR file does not contain path '%1%'", path);
         return *result;
     }
 
@@ -110,7 +110,7 @@ public:
 
         auto * dir = std::get_if<NarListing::Directory>(&i.raw);
         if (!dir)
-            throw Error("path '%1%' inside NAR file is not a directory", path);
+            throw UnstructuredError("path '%1%' inside NAR file is not a directory", path);
 
         DirEntries res;
         for (const auto & [name, child] : dir->entries)
@@ -124,7 +124,7 @@ public:
         auto & i = get(path);
         auto * reg = std::get_if<NarListing::Regular>(&i.raw);
         if (!reg)
-            throw Error("path '%1%' inside NAR file is not a regular file", path);
+            throw UnstructuredError("path '%1%' inside NAR file is not a regular file", path);
 
         assert(getNarBytes);
         sizeCallback(reg->contents.fileSize.value());
@@ -136,7 +136,7 @@ public:
         auto & i = get(path);
         auto * sym = std::get_if<NarListing::Symlink>(&i.raw);
         if (!sym)
-            throw Error("path '%1%' inside NAR file is not a symlink", path);
+            throw UnstructuredError("path '%1%' inside NAR file is not a symlink", path);
         return sym->target;
     }
 };
@@ -175,9 +175,9 @@ GetNarBytes seekableGetNarBytes(Descriptor fd)
 {
     return [fd](uint64_t offset, uint64_t length, Sink & sink) {
         if (offset >= std::numeric_limits<off_t>::max()) /* Just in case off_t is not 64 bits. */
-            throw Error("can't read %1% NAR bytes from offset %2%: offset too big", length, offset);
+            throw UnstructuredError("can't read %1% NAR bytes from offset %2%: offset too big", length, offset);
         if (length >= std::numeric_limits<size_t>::max()) /* Just in case size_t is 32 bits. */
-            throw Error("can't read %1% NAR bytes from offset %2%: length is too big", length, offset);
+            throw UnstructuredError("can't read %1% NAR bytes from offset %2%: length is too big", length, offset);
         copyFdRange(fd, static_cast<off_t>(offset), static_cast<size_t>(length), sink);
     };
 }

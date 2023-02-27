@@ -112,10 +112,15 @@ struct Trace
 
 inline std::strong_ordering operator<=>(const Trace & lhs, const Trace & rhs);
 
+/**
+ * Everything about an error except its message.
+ *
+ * The message is deliberately not here, so that errors can produce it
+ * on demand (see `BaseError::renderMessage`) rather than store it.
+ */
 struct ErrorInfo
 {
     Verbosity level;
-    HintFmt msg;
     std::shared_ptr<const Pos> pos;
     std::list<Trace> traces;
     /**
@@ -135,11 +140,54 @@ struct ErrorInfo
     static std::optional<std::string> programName;
 };
 
-std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool showTrace);
+/**
+ * Render an error in the standard format: prefix, message, position,
+ * suggestions, and traces.
+ *
+ * @param msg Writes the message proper to the given stream. A callback
+ * so that a message need not be materialised into a string just to be
+ * printed.
+ */
+std::ostream &
+showErrorInfo(std::ostream & out, const ErrorInfo & einfo, fun<void(std::ostream &)> msg, bool showTrace);
 
 /**
- * BaseError should generally not be caught, as it has Interrupted as
- * a subclass. Catch Error instead.
+ * Convenience for the common case of an already-formatted message.
+ */
+std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, const HintFmt & msg, bool showTrace);
+
+/**
+ * `ErrorInfo` as it was before the message was split out of it.
+ *
+ * This exists only so that the existing `throw UnstructuredError({.msg = ..., .pos = ...})`
+ * constructions keep working, via `Unstructured(ErrorInfoCompat &&)`. New code
+ * should pass the `ErrorInfo` and the message separately, and once all the
+ * old sites are converted this should go away.
+ */
+struct ErrorInfoCompat
+{
+    Verbosity level;
+    HintFmt msg;
+    std::shared_ptr<const Pos> pos;
+    std::list<Trace> traces;
+    bool isFromExpr = false;
+    bool noIndent = false;
+    unsigned int status = 1;
+    Suggestions suggestions;
+};
+
+/**
+ * The root of the exception hierarchy.
+ *
+ * Holds the `ErrorInfo`, but not the message: that is produced by the
+ * virtual `renderMessage`. Structured errors thus keep their data in
+ * fields and format the message from them on demand, rather than
+ * storing a format string that duplicates the fields (see issue #7865).
+ * Ad hoc errors, made with a format string at the throw site, get that
+ * string stored for them by the `Unstructured` mixin.
+ *
+ * Should generally not be caught, as it has `Interrupted` as a subclass.
+ * Catch `Error` instead.
  */
 class BaseError : public std::exception
 {
@@ -151,41 +199,18 @@ protected:
     mutable ErrorInfo err;
 
     /**
-     * Cached formatted contents of `err.msg`.
+     * Cached result of rendering the whole error, see `calcWhat`.
      */
     mutable std::optional<std::string> what_;
     /**
-     * Format `err.msg` and set `what_` to the resulting value.
+     * Render the whole error, as `showErrorInfo` would, and set `what_`
+     * to the resulting value.
      */
     const std::string & calcWhat() const;
 
-public:
     BaseError(const BaseError &) = default;
     BaseError & operator=(const BaseError &) = default;
     BaseError & operator=(BaseError &&) noexcept = default;
-
-    template<typename... Args>
-    BaseError(unsigned int status, Args &&... args)
-        : err{.level = lvlError, .msg = HintFmt(std::forward<Args>(args)...), .pos = {}, .status = status}
-    {
-    }
-
-    template<typename... Args>
-    explicit BaseError(const std::string & fs, Args &&... args)
-        : err{.level = lvlError, .msg = HintFmt(fs, std::forward<Args>(args)...), .pos = {}}
-    {
-    }
-
-    template<typename... Args>
-    BaseError(const Suggestions & sug, Args &&... args)
-        : err{.level = lvlError, .msg = HintFmt(std::forward<Args>(args)...), .pos = {}, .suggestions = sug}
-    {
-    }
-
-    BaseError(HintFmt hint)
-        : err{.level = lvlError, .msg = hint, .pos = {}}
-    {
-    }
 
     BaseError(ErrorInfo && e)
         : err(std::move(e))
@@ -197,10 +222,17 @@ public:
     {
     }
 
+public:
+    /**
+     * The message proper: without the "error: " prefix, position,
+     * suggestions, or traces.
+     */
+    virtual HintFmt renderMessage() const = 0;
+
     /** The error message without "error: " prefixed to it. */
     std::string message() const
     {
-        return err.msg.str();
+        return renderMessage().str();
     }
 
     const char * what() const noexcept override
@@ -309,16 +341,126 @@ public:
         using CloneableError<newClass, superClass>::CloneableError; \
     }
 
-MakeError(Error, BaseError);
-MakeError(UsageError, Error);
-MakeError(UnimplementedError, Error);
+/**
+ * The error type to catch.
+ *
+ * Abstract: it has no message of its own. Every concrete error is
+ * either an `UnstructuredError` (or subclass), which stores a formatted
+ * message, or a structured error, which derives from this (or a
+ * subclass) and implements `renderMessage` in terms of its own fields.
+ * Either way, `catch (Error &)` gets it.
+ */
+class Error : public BaseError
+{
+    void anchor() override;
+
+protected:
+    using BaseError::BaseError;
+};
+
+/**
+ * Mixin that gives an error a pre-formatted message.
+ *
+ * This is what the vast majority of errors are: made ad hoc at the throw
+ * site from a format string and arguments. It provides all the
+ * constructors that take a format string, and stores the resulting
+ * `HintFmt` as `hint`, which is what `renderMessage` returns.
+ *
+ * `Base` is the abstract error class to hang the message off of:
+ * `Error` for `UnstructuredError`, `BaseError` for `Interrupted`.
+ */
+template<typename Base>
+class Unstructured : public Base
+{
+public:
+    /**
+     * The pre-formatted message.
+     */
+    HintFmt hint;
+
+    Unstructured(const Unstructured &) = default;
+    Unstructured & operator=(const Unstructured &) = default;
+    Unstructured & operator=(Unstructured &&) noexcept = default;
+
+    template<typename... Args>
+    Unstructured(unsigned int status, Args &&... args)
+        : Base(ErrorInfo{.level = lvlError, .status = status})
+        , hint(std::forward<Args>(args)...)
+    {
+    }
+
+    template<typename... Args>
+    explicit Unstructured(const std::string & fs, Args &&... args)
+        : Base(ErrorInfo{.level = lvlError})
+        , hint(fs, std::forward<Args>(args)...)
+    {
+    }
+
+    template<typename... Args>
+    Unstructured(const Suggestions & sug, Args &&... args)
+        : Base(ErrorInfo{.level = lvlError, .suggestions = sug})
+        , hint(std::forward<Args>(args)...)
+    {
+    }
+
+    Unstructured(HintFmt hint)
+        : Base(ErrorInfo{.level = lvlError})
+        , hint(std::move(hint))
+    {
+    }
+
+    Unstructured(ErrorInfo && e, HintFmt hint)
+        : Base(std::move(e))
+        , hint(std::move(hint))
+    {
+    }
+
+    Unstructured(const ErrorInfo & e, HintFmt hint)
+        : Base(e)
+        , hint(std::move(hint))
+    {
+    }
+
+    /**
+     * Deprecated: for the many existing `throw UnstructuredError({.msg = ..., .pos = ...})`
+     * sites. Prefer the two-argument constructor above.
+     */
+    Unstructured(ErrorInfoCompat && e)
+        : Base(
+              ErrorInfo{
+                  .level = e.level,
+                  .pos = std::move(e.pos),
+                  .traces = std::move(e.traces),
+                  .isFromExpr = e.isFromExpr,
+                  .noIndent = e.noIndent,
+                  .status = e.status,
+                  .suggestions = std::move(e.suggestions),
+              })
+        , hint(std::move(e.msg))
+    {
+    }
+
+    HintFmt renderMessage() const override
+    {
+        return hint;
+    }
+};
+
+/**
+ * The error type to throw when there is nothing structured to say: just
+ * a message made from a format string at the throw site.
+ */
+MakeError(UnstructuredError, Unstructured<Error>);
+
+MakeError(UsageError, UnstructuredError);
+MakeError(UnimplementedError, UnstructuredError);
 
 /**
  * To use in catch-blocks. Provides a convenience method to get the portable
  * std::error_code. Use when you want to catch and check an error condition like
  * no_such_file_or_directory (ENOENT) without ifdefs.
  */
-class SystemError : public CloneableError<SystemError, Error>
+class SystemError : public CloneableError<SystemError, UnstructuredError>
 {
     std::error_code errorCode;
     std::string errorDetails;

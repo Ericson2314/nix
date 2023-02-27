@@ -19,7 +19,7 @@ class EvalErrorBuilder;
  *
  * Most subclasses should inherit from `EvalError` instead of this class.
  */
-class EvalBaseError : public CloneableError<EvalBaseError, Error>
+class EvalBaseError : public CloneableError<EvalBaseError, UnstructuredError>
 {
     template<class T>
     friend class EvalErrorBuilder;
@@ -29,8 +29,8 @@ class EvalBaseError : public CloneableError<EvalBaseError, Error>
 public:
     EvalState & state;
 
-    EvalBaseError(EvalState & state, ErrorInfo && errorInfo)
-        : CloneableError(errorInfo)
+    EvalBaseError(EvalState & state, ErrorInfo && errorInfo, HintFmt hint)
+        : CloneableError(std::move(errorInfo), std::move(hint))
         , state(state)
     {
     }
@@ -50,7 +50,7 @@ public:
  * cached in pure mode. This means that they should not depend on the configuration or the overall environment.
  */
 MakeError(EvalError, EvalBaseError);
-MakeError(ParseError, Error);
+MakeError(ParseError, UnstructuredError);
 MakeError(AssertionError, EvalError);
 MakeError(ThrownError, AssertionError);
 MakeError(Abort, EvalError);

@@ -80,7 +80,7 @@ static std::string_view successStatusToString(BuildResult::Success::Status statu
         if (enumVal == status)
             return str;
     }
-    throw Error("unknown success status: %d", static_cast<int>(status));
+    throw UnstructuredError("unknown success status: %d", static_cast<int>(status));
 }
 
 static BuildResult::Success::Status successStatusFromString(std::string_view str)
@@ -89,7 +89,7 @@ static BuildResult::Success::Status successStatusFromString(std::string_view str
         if (enumStr == str)
             return enumVal;
     }
-    throw Error("unknown built result success status '%s'", str);
+    throw UnstructuredError("unknown built result success status '%s'", str);
 }
 
 static constexpr std::array<std::pair<BuildResult::Failure::Status, std::string_view>, 12> failureStatusStrings{{
@@ -115,7 +115,7 @@ static std::string_view failureStatusToString(BuildResult::Failure::Status statu
         if (enumVal == status)
             return str;
     }
-    throw Error("unknown failure status: %d", static_cast<int>(status));
+    throw UnstructuredError("unknown failure status: %d", static_cast<int>(status));
 }
 
 static BuildResult::Failure::Status failureStatusFromString(std::string_view str)
@@ -124,7 +124,7 @@ static BuildResult::Failure::Status failureStatusFromString(std::string_view str
         if (enumStr == str)
             return enumVal;
     }
-    throw Error("unknown built result failure status '%s'", str);
+    throw UnstructuredError("unknown built result failure status '%s'", str);
 }
 
 bool BuildError::operator==(const BuildError & other) const noexcept

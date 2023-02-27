@@ -134,10 +134,10 @@ ref<LegacySSHStore::Connection> LegacySSHStore::openConnection()
             NullSink nullSink;
             tee.drainInto(nullSink);
         }
-        throw Error(
+        throw UnstructuredError(
             "'nix-store --serve' protocol mismatch from '%s', got '%s'", config->authority.host, chomp(saved.s));
     } catch (EndOfFile & e) {
-        throw Error("cannot connect to '%1%'", config->authority.host);
+        throw UnstructuredError("cannot connect to '%1%'", config->authority.host);
     }
 
     return conn;
@@ -168,7 +168,7 @@ std::map<StorePath, UnkeyedValidPathInfo> LegacySSHStore::queryPathInfosUncached
 
     for (const auto & [_, info] : infos) {
         if (info.narHash == Hash::dummy)
-            throw Error("NAR hash is now mandatory");
+            throw UnstructuredError("NAR hash is now mandatory");
     }
 
     return infos;
@@ -190,7 +190,7 @@ void LegacySSHStore::queryPathInfoUncached(
             return callback(std::make_shared<ValidPathInfo>(std::move(path), std::move(info)));
         }
         default:
-            throw Error("More path infos returned than queried");
+            throw UnstructuredError("More path infos returned than queried");
         }
     } catch (...) {
         callback.rethrow();
@@ -219,7 +219,8 @@ void LegacySSHStore::addToStore(const ValidPathInfo & info, Source & source, Rep
     conn->to.flush();
 
     if (readInt(conn->from) != 1)
-        throw Error("failed to add path '%s' to remote host '%s'", printStorePath(info.path), config->authority.host);
+        throw UnstructuredError(
+            "failed to add path '%s' to remote host '%s'", printStorePath(info.path), config->authority.host);
 }
 
 void LegacySSHStore::narFromPath(const StorePath & path, Sink & sink)
@@ -278,12 +279,12 @@ LegacySSHBuilder::buildPathsRaw(const std::vector<DerivedPath> & drvPaths, Build
             overloaded{
                 [&](const StorePathWithOutputs & s) { ss.push_back(s.to_string(*store)); },
                 [&](const StorePath & drvPath) {
-                    throw Error(
+                    throw UnstructuredError(
                         "wanted to fetch '%s' but the legacy ssh protocol doesn't support merely substituting drv files via the build paths command. It would build them instead. Try using ssh-ng://",
                         store->printStorePath(drvPath));
                 },
                 [&](std::monostate) {
-                    throw Error(
+                    throw UnstructuredError(
                         "wanted build derivation that is itself a build product, but the legacy ssh protocol doesn't support that. Try using ssh-ng://");
                 },
             },
@@ -390,7 +391,7 @@ LegacySSHBuilder::buildPathsWithResults(const std::vector<DerivedPath> & reqs, B
 ref<Builder> LegacySSHStore::getBuilder(std::shared_ptr<Store> evalStore)
 {
     if (evalStore && evalStore.get() != this)
-        throw Error("building on an SSH store is incompatible with '--eval-store'");
+        throw UnstructuredError("building on an SSH store is incompatible with '--eval-store'");
     return make_ref<LegacySSHBuilder>(
         ref<LegacySSHStore>(std::dynamic_pointer_cast<LegacySSHStore>(shared_from_this())));
 }

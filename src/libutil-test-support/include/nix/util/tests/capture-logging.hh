@@ -23,9 +23,9 @@ public:
         oss << s << std::endl;
     }
 
-    void logEI(const ErrorInfo & ei) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
     {
-        showErrorInfo(oss, ei, loggerSettings.showTrace.get());
+        showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
     }
 };
 

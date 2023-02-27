@@ -16,7 +16,7 @@ Bindings * EvalMemory::allocBindings(size_t capacity)
         /* Swear that we are not going to modify this. */
         return const_cast<Bindings *>(&Bindings::emptyBindings);
     if (capacity > std::numeric_limits<Bindings::size_type>::max())
-        throw Error("attribute set of size %d is too big", capacity);
+        throw UnstructuredError("attribute set of size %d is too big", capacity);
     stats.nrAttrsets++;
     stats.nrAttrsInAttrsets += capacity;
     return new (allocBytes(sizeof(Bindings) + sizeof(Attr) * capacity)) Bindings();

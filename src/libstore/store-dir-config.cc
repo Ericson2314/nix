@@ -111,7 +111,7 @@ StorePath StoreDirConfig::makeFixedOutputPath(std::string_view name, const Fixed
 {
     if (info.method == FileIngestionMethod::Git
         && !(info.hash.algo == HashAlgorithm::SHA1 || info.hash.algo == HashAlgorithm::SHA256)) {
-        throw Error(
+        throw UnstructuredError(
             "Git file ingestion must use SHA-1 or SHA-256 hash, but instead using: %s", printHashAlgo(info.hash.algo));
     }
 
@@ -119,7 +119,7 @@ StorePath StoreDirConfig::makeFixedOutputPath(std::string_view name, const Fixed
         return makeStorePath(makeType(*this, "source", info.references), info.hash, name);
     } else {
         if (!info.references.empty()) {
-            throw Error(
+            throw UnstructuredError(
                 "fixed output derivation '%s' is not allowed to refer to other store paths.\nYou may need to use the 'unsafeDiscardReferences' derivation attribute, see the manual for more details.",
                 name);
         }

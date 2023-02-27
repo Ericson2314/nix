@@ -40,7 +40,7 @@ StringMap getCgroups(const std::filesystem::path & cgroupFile)
         static std::regex regex("([0-9]+):([^:]*):(.*)");
         std::smatch match;
         if (!std::regex_match(line, match, regex))
-            throw Error("invalid line '%s' in %s", line, PathFmt(cgroupFile));
+            throw UnstructuredError("invalid line '%s' in %s", line, PathFmt(cgroupFile));
 
         std::string name = hasPrefix(std::string(match[2]), "name=") ? std::string(match[2], 5) : match[2];
         cgroups.insert_or_assign(name, match[3]);
@@ -84,7 +84,7 @@ static CgroupStats destroyCgroup(const std::filesystem::path & cgroup, bool retu
     auto procsFile = cgroup / "cgroup.procs";
 
     if (!pathExists(procsFile))
-        throw Error("%s is not a cgroup", PathFmt(cgroup));
+        throw UnstructuredError("%s is not a cgroup", PathFmt(cgroup));
 
     /* Use the fast way to kill every process in a cgroup, if
        available. */
@@ -112,14 +112,14 @@ static CgroupStats destroyCgroup(const std::filesystem::path & cgroup, bool retu
             break;
 
         if (round > 20)
-            throw Error("cannot kill cgroup %s", PathFmt(cgroup));
+            throw UnstructuredError("cannot kill cgroup %s", PathFmt(cgroup));
 
         for (auto & pid_s : pids) {
             pid_t pid;
             if (auto o = string2Int<pid_t>(pid_s))
                 pid = *o;
             else
-                throw Error("invalid pid '%s'", pid);
+                throw UnstructuredError("invalid pid '%s'", pid);
             if (pidsShown.insert(pid).second) {
                 try {
                     auto cmdline = readFile(fmt("/proc/%d/cmdline", pid));
@@ -159,12 +159,12 @@ CanonPath getCurrentCgroup()
 {
     auto cgroupFS = getCgroupFS();
     if (!cgroupFS)
-        throw Error("cannot determine the cgroups file system");
+        throw UnstructuredError("cannot determine the cgroups file system");
 
     auto ourCgroups = getCgroups("/proc/self/cgroup");
     auto ourCgroup = ourCgroups[""];
     if (ourCgroup == "")
-        throw Error("cannot determine cgroup name from /proc/self/cgroup");
+        throw UnstructuredError("cannot determine cgroup name from /proc/self/cgroup");
     return CanonPath{ourCgroup};
 }
 

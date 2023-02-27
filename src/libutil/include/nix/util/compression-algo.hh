@@ -37,6 +37,6 @@ CompressionAlgo parseCompressionAlgo(std::string_view method, bool suggestions =
 
 std::string showCompressionAlgo(CompressionAlgo method);
 
-MakeError(UnknownCompressionMethod, Error);
+MakeError(UnknownCompressionMethod, UnstructuredError);
 
 } // namespace nix

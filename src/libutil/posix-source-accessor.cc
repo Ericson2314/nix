@@ -920,7 +920,7 @@ ref<SourceAccessor> makeFSSourceAccessor(std::filesystem::path root, bool trackL
     }
 
     else
-        throw Error("file %1% has an unsupported type", PathFmt(root));
+        throw UnstructuredError("file %1% has an unsupported type", PathFmt(root));
 #else
     return make_ref<WindowsSourceAccessor>(std::move(root), trackLastModified);
 #endif

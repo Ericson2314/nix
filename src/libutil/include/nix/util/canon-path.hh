@@ -14,7 +14,7 @@
 
 namespace nix {
 
-MakeError(BadCanonPath, Error);
+MakeError(BadCanonPath, UnstructuredError);
 
 /**
  * A canonical representation of a path. It ensures the following:

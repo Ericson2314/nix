@@ -54,9 +54,11 @@ auto getInteger(const nlohmann::json & value) -> std::enable_if_t<std::is_signed
         }
     } else {
         auto typeName = value.is_number_float() ? "floating point number" : value.type_name();
-        throw Error("Expected JSON value to be an integral number but it is of type '%s': %s", typeName, value.dump());
+        throw UnstructuredError(
+            "Expected JSON value to be an integral number but it is of type '%s': %s", typeName, value.dump());
     }
-    throw Error("Out of range: JSON value '%s' cannot be casted to %d-bit integer", value.dump(), 8 * sizeof(T));
+    throw UnstructuredError(
+        "Out of range: JSON value '%s' cannot be casted to %d-bit integer", value.dump(), 8 * sizeof(T));
 }
 
 template<typename... Args>

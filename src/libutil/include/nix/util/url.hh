@@ -211,7 +211,7 @@ struct ParsedURL
 
 std::ostream & operator<<(std::ostream & os, const ParsedURL & url);
 
-MakeError(BadURL, Error);
+MakeError(BadURL, UnstructuredError);
 
 std::string percentDecode(std::string_view in);
 std::string percentEncode(std::string_view s, std::string_view keep = "");

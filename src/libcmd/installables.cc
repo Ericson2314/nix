@@ -396,7 +396,7 @@ void completeFlakeRefWithFragment(
             }
         }
     } catch (Error & e) {
-        logWarning(e.info());
+        logExWarning(e);
     }
 }
 
@@ -430,7 +430,7 @@ DerivedPathWithInfo Installable::toDerivedPath()
 {
     auto buildables = toDerivedPaths();
     if (buildables.size() != 1)
-        throw Error(
+        throw UnstructuredError(
             "installable '%s' evaluates to %d derivations, where only one is expected", what(), buildables.size());
     return std::move(buildables[0]);
 }
@@ -439,7 +439,7 @@ static StorePath getDeriver(ref<Store> store, const Installable & i, const Store
 {
     auto derivers = store->queryValidDerivers(drvPath);
     if (derivers.empty())
-        throw Error("'%s' does not have a known deriver", i.what());
+        throw UnstructuredError("'%s' does not have a known deriver", i.what());
     // FIXME: use all derivers?
     return *derivers.begin();
 }
@@ -562,11 +562,11 @@ static void throwBuildErrors(std::vector<KeyedBuildResult> & buildResults, const
             StringSet failedPaths;
             for (; failedResult != failed.end(); failedResult++) {
                 if (!failedResult->second->message().empty()) {
-                    logError(failedResult->second->info());
+                    logExError(*failedResult->second);
                 }
                 failedPaths.insert(failedResult->first->path.to_string(store));
             }
-            throw Error("build of %s failed", concatStringsSep(", ", quoteStrings(failedPaths)));
+            throw UnstructuredError("build of %s failed", concatStringsSep(", ", quoteStrings(failedPaths)));
         }
     }
 }
@@ -703,7 +703,7 @@ StorePath Installable::toStorePath(
     auto paths = toStorePathSet(evalStore, store, mode, operateOn, {installable});
 
     if (paths.size() != 1)
-        throw Error("argument '%s' should evaluate to one store path", installable->what());
+        throw UnstructuredError("argument '%s' should evaluate to one store path", installable->what());
 
     return *paths.begin();
 }
@@ -719,8 +719,9 @@ StorePathSet Installable::toDerivations(ref<Store> store, const Installables & i
                     [&](const DerivedPath::Opaque & bo) {
                         drvPaths.insert(
                             bo.path.isDerivation() ? bo.path
-                            : useDeriver           ? getDeriver(store, *i, bo.path)
-                                         : throw Error("argument '%s' did not evaluate to a derivation", i->what()));
+                            : useDeriver
+                                ? getDeriver(store, *i, bo.path)
+                                : throw UnstructuredError("argument '%s' did not evaluate to a derivation", i->what()));
                     },
                     [&](const DerivedPath::Built & bfd) { drvPaths.insert(resolveDerivedPath(*store, *bfd.drvPath)); },
                 },

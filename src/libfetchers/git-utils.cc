@@ -80,14 +80,14 @@ struct GitSourceAccessor;
 
 namespace {
 
-struct GitError final : public CloneableError<GitError, Error>
+struct GitError final : public CloneableError<GitError, UnstructuredError>
 {
     template<typename... Ts>
     GitError(const git_error & error, Ts &&... args)
         : CloneableError("")
     {
         auto hf = HintFmt(std::forward<Ts>(args)...);
-        err.msg = HintFmt("%1%: %2% (libgit2 error code = %3%)", Uncolored(hf.str()), error.message, error.klass);
+        hint = HintFmt("%1%: %2% (libgit2 error code = %3%)", Uncolored(hf.str()), error.message, error.klass);
     }
 
     template<typename... Ts>
@@ -195,7 +195,7 @@ static git_oid hashToOID(const Hash & hash)
         t = GIT_OID_SHA256;
         break;
     default:
-        throw Error("unsupported hash algorithm for Git: %s", printHashAlgo(hash.algo));
+        throw UnstructuredError("unsupported hash algorithm for Git: %s", printHashAlgo(hash.algo));
     }
 #  pragma GCC diagnostic pop
     if (git_oid_from_raw(&oid, hash.hash, t))
@@ -223,7 +223,7 @@ static T peelObject(git_object * obj, git_object_t type)
 {
     T obj2;
     if (git_object_peel((git_object **) (typename T::pointer *) Setter(obj2), obj, type)) {
-        throw Error("peeling Git object '%s'", *git_object_id(obj));
+        throw UnstructuredError("peeling Git object '%s'", *git_object_id(obj));
     }
     return obj2;
 }
@@ -266,7 +266,7 @@ struct PackBuilderContext
 
             std::rethrow_exception(exception);
         default:
-            throw Error("%s: %i, %s", Uncolored(activity), errCode, git_error_last()->message);
+            throw UnstructuredError("%s: %i, %s", Uncolored(activity), errCode, git_error_last()->message);
         }
     }
 };
@@ -298,7 +298,7 @@ static void initRepoAtomically(std::filesystem::path & path, GitRepo::Options op
         return;
 
     if (!options.create)
-        throw Error("Git repository %s does not exist.", PathFmt(path));
+        throw UnstructuredError("Git repository %s does not exist.", PathFmt(path));
 
     std::filesystem::path tmpDir = createTempDir(path.parent_path());
     AutoDelete delTmpDir(tmpDir, true);
@@ -671,7 +671,7 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
     {
         Reference ref;
         if (git_reference_lookup(Setter(ref), *this, "HEAD"))
-            throw Error("looking up HEAD: %s", git_error_last()->message);
+            throw UnstructuredError("looking up HEAD: %s", git_error_last()->message);
 
         if (auto target = git_reference_symbolic_target(ref.get()))
             return target;
@@ -685,7 +685,7 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
     {
         git_buf buf = GIT_BUF_INIT;
         if (git_submodule_resolve_url(&buf, *this, requireCString(url)))
-            throw Error("resolving Git submodule URL '%s'", url);
+            throw UnstructuredError("resolving Git submodule URL '%s'", url);
         Finally cleanup = [&]() { git_buf_dispose(&buf); };
 
         std::string res(buf.ptr);
@@ -751,7 +751,7 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
         auto status = runProgram({.program = "git", .args = gitArgs, .isInteractive = true}).first;
 
         if (status > 0)
-            throw Error("Failed to fetch git repository '%s'", url);
+            throw UnstructuredError("Failed to fetch git repository '%s'", url);
     }
 
     void verifyCommit(const Hash & rev, const std::vector<fetchers::PublicKey> & publicKeys) override
@@ -776,7 +776,7 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
                 for (const auto & [type, _] : keyTypeMap) {
                     supportedTypes += fmt("  %s\n", type);
                 }
-                throw Error(
+                throw UnstructuredError(
                     "Invalid SSH key type '%s' in publicKeys.\n"
                     "Please use one of:\n%s",
                     k.type,
@@ -825,7 +825,7 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
         if (status == 0 && std::regex_search(output, std::regex(re)))
             printTalkative("Signature verification on commit %s succeeded.", rev.gitRev());
         else
-            throw Error("Commit signature verification on commit %s failed: %s", rev.gitRev(), output);
+            throw UnstructuredError("Commit signature verification on commit %s failed: %s", rev.gitRev(), output);
     }
 
     Hash treeHashToNarHash(const fetchers::Settings & settings, const Hash & treeHash) override
@@ -965,7 +965,7 @@ public:
             return Stat{.type = tDirectory};
 
         else
-            throw Error("file '%s' has an unsupported Git file type");
+            throw UnstructuredError("file '%s' has an unsupported Git file type");
     }
 
     DirEntries readDirectory(const CanonPath & path) override
@@ -1083,7 +1083,7 @@ public:
     {
         auto entry = lookup(state, path);
         if (!entry)
-            throw Error("'%s' does not exist", showPath(path));
+            throw UnstructuredError("'%s' does not exist", showPath(path));
         return entry;
     }
 
@@ -1096,7 +1096,7 @@ public:
             if (git_object_type(state.root.get()) == GIT_OBJECT_TREE)
                 return dupObject<Tree>((git_tree *) &*state.root);
             else
-                throw Error("Git root object '%s' is not a directory", *git_object_id(state.root.get()));
+                throw UnstructuredError("Git root object '%s' is not a directory", *git_object_id(state.root.get()));
         }
 
         auto entry = need(state, path);
@@ -1105,7 +1105,7 @@ public:
             return Submodule();
 
         if (git_tree_entry_type(entry) != GIT_OBJECT_TREE)
-            throw Error("'%s' is not a directory", showPath(path));
+            throw UnstructuredError("'%s' is not a directory", showPath(path));
 
         Tree tree;
         if (git_tree_entry_to_object((git_object **) (git_tree **) Setter(tree), *state.repo, entry))
@@ -1120,7 +1120,8 @@ public:
             return dupObject<Blob>((git_blob *) &*state.root);
 
         auto notExpected = [&]() {
-            throw Error(expectSymlink ? "'%s' is not a symlink" : "'%s' is not a regular file", showPath(path));
+            throw UnstructuredError(
+                expectSymlink ? "'%s' is not a symlink" : "'%s' is not a regular file", showPath(path));
         };
 
         if (path.isRoot())
@@ -1600,7 +1601,7 @@ struct GitRepoPoolImpl : GitRepoPool
             for (auto n : std::views::iota(0U, git_commit_parentcount(commit))) {
                 auto parentOid = git_commit_parent_id(commit, n);
                 if (!parentOid) {
-                    throw Error(
+                    throw UnstructuredError(
                         "Failed to retrieve the parent of Git commit '%s': %s. "
                         "This may be due to an incomplete repository history. "
                         "To resolve this, either enable the shallow parameter in your flake URL (?shallow=1) "
@@ -1731,7 +1732,7 @@ bool isLegalRefName(const std::string & refName)
          }) {
         int valid = 0;
         if (func(&valid, refName.c_str()))
-            throw Error("checking git reference '%s': %s", refName, git_error_last()->message);
+            throw UnstructuredError("checking git reference '%s': %s", refName, git_error_last()->message);
         if (valid)
             return true;
     }

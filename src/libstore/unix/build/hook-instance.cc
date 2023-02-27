@@ -16,7 +16,7 @@ HookInstance::HookInstance(const Strings & _buildHook, std::chrono::milliseconds
     auto buildHookArgs = _buildHook;
 
     if (buildHookArgs.empty())
-        throw Error("'build-hook' setting is empty");
+        throw UnstructuredError("'build-hook' setting is empty");
 
     std::filesystem::path buildHook = buildHookArgs.front();
     buildHookArgs.pop_front();

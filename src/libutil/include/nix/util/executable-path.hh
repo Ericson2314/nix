@@ -5,7 +5,7 @@
 
 namespace nix {
 
-MakeError(ExecutableLookupError, Error);
+MakeError(ExecutableLookupError, UnstructuredError);
 
 /**
  * @todo rename, it is not just good for executable paths, but also

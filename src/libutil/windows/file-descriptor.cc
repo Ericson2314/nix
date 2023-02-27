@@ -118,7 +118,7 @@ off_t lseek(HANDLE h, off_t offset, int whence)
         method = FILE_END;
         break;
     default:
-        throw Error("lseek: invalid whence %d", whence);
+        throw UnstructuredError("lseek: invalid whence %d", whence);
     }
 
     LARGE_INTEGER li;

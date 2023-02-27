@@ -15,7 +15,7 @@ static inline std::filesystem::path getUnitTestData()
 {
     auto data = getEnv("_NIX_TEST_UNIT_DATA");
     if (!data)
-        throw Error(
+        throw UnstructuredError(
             "_NIX_TEST_UNIT_DATA environment variable is not set. "
             "Recommendation: use meson, example: 'meson test -C build --gdb'");
     return std::filesystem::path(*data);

@@ -28,7 +28,7 @@ std::tuple<OsStrings, AutoCloseFD, AutoDelete> editorFor(const SourcePath & file
     auto stat = file2.lstat();
     /* TODO: Maybe we should print a directory listing and open that instead? */
     if (stat.type != SourceAccessor::tRegular)
-        throw Error("can't open a file %s of type '%s'", file2.to_string(), stat.typeString());
+        throw UnstructuredError("can't open a file %s of type '%s'", file2.to_string(), stat.typeString());
 
     auto tempDir = createTempDir(defaultTempDir(), "nix-edit", 0700);
     AutoDelete autoDel(tempDir, /*recursive=*/true);

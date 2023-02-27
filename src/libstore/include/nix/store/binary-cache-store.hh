@@ -259,6 +259,6 @@ public:
     void addBuildLog(const StorePath & drvPath, std::string_view log) override;
 };
 
-MakeError(NoSuchBinaryCacheFile, Error);
+MakeError(NoSuchBinaryCacheFile, UnstructuredError);
 
 } // namespace nix

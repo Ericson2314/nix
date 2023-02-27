@@ -172,7 +172,7 @@ static std::ostream & showDebugTrace(std::ostream & out, const PosTable & positi
  * but those must be reported as errors, not trigger continuation. The
  * exception subtype is what distinguishes the two cases.
  */
-MakeError(IncompleteReplExpr, Error);
+MakeError(IncompleteReplExpr, UnstructuredError);
 
 static bool isIncompleteInput(const ParseError & e)
 {
@@ -326,12 +326,13 @@ StorePath NixRepl::getDerivationPath(Value & v)
 {
     auto packageInfo = getDerivation(*state, v, false);
     if (!packageInfo)
-        throw Error("expression does not evaluate to a derivation, so I can't build it");
+        throw UnstructuredError("expression does not evaluate to a derivation, so I can't build it");
     auto drvPath = packageInfo->queryDrvPath();
     if (!drvPath)
-        throw Error("expression did not evaluate to a valid derivation (no 'drvPath' attribute)");
+        throw UnstructuredError("expression did not evaluate to a valid derivation (no 'drvPath' attribute)");
     if (!state->store->isValidPath(*drvPath))
-        throw Error("expression evaluated to invalid derivation '%s'", state->store->printStorePath(*drvPath));
+        throw UnstructuredError(
+            "expression evaluated to invalid derivation '%s'", state->store->printStorePath(*drvPath));
     return *drvPath;
 }
 
@@ -495,7 +496,7 @@ ProcessLineResult NixRepl::processLine(std::string line)
                 if (auto path = std::get_if<SourcePath>(&pos.origin))
                     return {*path, pos.line};
                 else
-                    throw Error("'%s' cannot be shown in an editor", pos);
+                    throw UnstructuredError("'%s' cannot be shown in an editor", pos);
             } else {
                 // assume it's a derivation
                 return findPackageFilename(*state, v, arg);
@@ -658,7 +659,7 @@ ProcessLineResult NixRepl::processLine(std::string line)
             logger->cout(trim(renderMarkdownToTerminal(markdown)));
 
         } else
-            throw Error("value does not have documentation");
+            throw UnstructuredError("value does not have documentation");
     }
 
     else if (command == ":te" || command == ":trace-enable") {
@@ -669,12 +670,12 @@ ProcessLineResult NixRepl::processLine(std::string line)
             std::cout << "showing error traces\n";
             loggerSettings.showTrace = true;
         } else {
-            throw Error("unexpected argument '%s' to %s", arg, command);
+            throw UnstructuredError("unexpected argument '%s' to %s", arg, command);
         };
     }
 
     else if (command != "")
-        throw Error("unknown command '%1%'", command);
+        throw UnstructuredError("unknown command '%1%'", command);
 
     else {
         // Try parsing as bindings first (handles `x = 1`, `inherit ...`, etc.)
@@ -714,7 +715,8 @@ void NixRepl::loadFile(const std::filesystem::path & path)
 void NixRepl::loadFlake(const std::string & flakeRefS)
 {
     if (flakeRefS.empty())
-        throw Error("cannot use ':load-flake' without a path specified. (Use '.' for the current working directory.)");
+        throw UnstructuredError(
+            "cannot use ':load-flake' without a path specified. (Use '.' for the current working directory.)");
 
     std::filesystem::path cwd;
     try {
@@ -728,7 +730,8 @@ void NixRepl::loadFlake(const std::string & flakeRefS)
 
     auto flakeRef = parseFlakeRef(flakeRefS, cwd.string(), true);
     if (isPureEval && !flakeRef.input.isLocked(fetchSettings))
-        throw Error("cannot use ':load-flake' on unlocked flake reference '%s' (use --impure to override)", flakeRefS);
+        throw UnstructuredError(
+            "cannot use ':load-flake' on unlocked flake reference '%s' (use --impure to override)", flakeRefS);
 
     Value v;
 
@@ -766,7 +769,7 @@ void NixRepl::initEnv()
 void NixRepl::showLastLoaded()
 {
     if (!lastLoaded)
-        throw Error("nothing has been loaded yet");
+        throw UnstructuredError("nothing has been loaded yet");
 
     RunPager pager;
     try {
@@ -839,7 +842,7 @@ void NixRepl::addAttrsToScope(Value & attrs)
         [&]() { return attrs.determinePos(noPos); },
         "while evaluating an attribute set to be merged in the global scope");
     if (displ + attrs.attrs()->size() >= envSize)
-        throw Error("environment full; cannot add more variables");
+        throw UnstructuredError("environment full; cannot add more variables");
 
     for (auto & i : *attrs.attrs()) {
         staticEnv->vars.emplace_back(i.name, displ);
@@ -875,7 +878,7 @@ void NixRepl::addAttrsToScope(Value & attrs)
 void NixRepl::addVarToScope(const Symbol name, Value & v)
 {
     if (displ >= envSize)
-        throw Error("environment full; cannot add more variables");
+        throw UnstructuredError("environment full; cannot add more variables");
     if (auto oldVar = staticEnv->find(name); oldVar != staticEnv->vars.end())
         staticEnv->vars.erase(oldVar);
     staticEnv->vars.emplace_back(name, displ);
@@ -929,7 +932,7 @@ void NixRepl::runNix(const std::string & program, OsStrings args)
     if (runNixPtr)
         (*runNixPtr)(program, std::move(args));
     else
-        throw Error(
+        throw UnstructuredError(
             "Cannot run '%s' because no method of calling the Nix CLI was provided. This is a configuration problem pertaining to how this program was built. See Nix 2.25 release notes",
             program);
 }

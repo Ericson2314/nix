@@ -21,7 +21,7 @@ constexpr T alignUp(T val, unsigned alignment)
     assert(alignment <= std::numeric_limits<T>::max());
     T mask = ~(static_cast<T>(alignment) - 1u);
     if (val > std::numeric_limits<T>::max() - (alignment - 1)) /* Overflow check. */
-        throw Error("can't align %d to %d: value is too large", val, alignment);
+        throw UnstructuredError("can't align %d to %d: value is too large", val, alignment);
     return (val + alignment - 1) & mask;
 }
 

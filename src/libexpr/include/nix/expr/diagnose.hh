@@ -50,9 +50,9 @@ void diagnose(const Setting<Diagnose> & setting, const F & mkError)
         auto maybeError = mkError(fatal);
         if (!maybeError)
             return;
-        auto & info = maybeError->unsafeInfo();
         // Append the setting name to help users find the right setting
-        info.msg = HintFmt("%s (" ANSI_BOLD "%s" ANSI_NORMAL ")", Uncolored(info.msg.str()), setting.name);
+        maybeError->hint =
+            HintFmt("%s (" ANSI_BOLD "%s" ANSI_NORMAL ")", Uncolored(maybeError->hint.str()), setting.name);
         maybeError->recalcWhat();
         handler(std::move(*maybeError));
     };
@@ -61,7 +61,7 @@ void diagnose(const Setting<Diagnose> & setting, const F & mkError)
     case Diagnose::Ignore:
         return;
     case Diagnose::Warn:
-        withError(false, [](auto && error) { logWarning(error.info()); });
+        withError(false, [](auto && error) { logExWarning(error); });
         return;
     case Diagnose::Fatal:
         withError(true, [](auto && error) { throw std::forward<decltype(error)>(error); });

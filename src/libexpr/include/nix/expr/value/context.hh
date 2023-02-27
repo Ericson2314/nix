@@ -9,7 +9,7 @@
 
 namespace nix {
 
-class BadNixStringContextElem final : public CloneableError<BadNixStringContextElem, Error>
+class BadNixStringContextElem final : public CloneableError<BadNixStringContextElem, UnstructuredError>
 {
     void anchor() override;
 
@@ -22,7 +22,7 @@ public:
     {
         raw = raw_;
         auto hf = HintFmt(std::forward<Args>(args)...);
-        err.msg = HintFmt("Bad String Context element: %1%: %2%", Uncolored(hf.str()), raw);
+        hint = HintFmt("Bad String Context element: %1%: %2%", Uncolored(hf.str()), raw);
     }
 };
 

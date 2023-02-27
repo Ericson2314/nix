@@ -169,7 +169,7 @@ struct MercurialInputScheme : InputScheme
                         runHg({OS_STR("commit"), absPath.native(), OS_STR("-m"), string_to_os_string(*commitMsg)});
                 },
                 [&](const std::string &) {
-                    throw Error(
+                    throw UnstructuredError(
                         "cannot commit '%s' to Mercurial repository '%s' because it's not a working tree",
                         path,
                         input.to_string());
@@ -218,7 +218,7 @@ struct MercurialInputScheme : InputScheme
                    files. */
 
                 if (!settings.allowDirty)
-                    throw Error("Mercurial tree '%s' is unclean", PathFmt{localPath});
+                    throw UnstructuredError("Mercurial tree '%s' is unclean", PathFmt{localPath});
 
                 if (settings.warnDirty)
                     warn("Mercurial tree '%s' is unclean", PathFmt{localPath});
@@ -278,7 +278,7 @@ struct MercurialInputScheme : InputScheme
 
         auto revInfoKey = [&](const Hash & rev) {
             if (rev.algo != HashAlgorithm::SHA1)
-                throw Error(
+                throw UnstructuredError(
                     "Hash '%s' is not supported by Mercurial. Only sha1 is supported.",
                     rev.to_string(HashFormat::Base16, true));
 

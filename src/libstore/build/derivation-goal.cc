@@ -141,7 +141,7 @@ Goal::Co DerivationGoal::haveDerivation(bool storeDerivation)
             co_return repairClosure();
         }
         if (buildMode == bmCheck && !allValid)
-            throw Error(
+            throw UnstructuredError(
                 "some outputs of '%s' are not valid, so checking is not possible\n"
                 "Hint: --rebuild and --check error if the derivation was not previously built and cannot be substituted.\n"
                 "      Remove it to perform a fresh build, or use --repair to rewrite missing or corrupted builds in the store.",
@@ -182,7 +182,7 @@ Goal::Co DerivationGoal::haveDerivation(bool storeDerivation)
         if (auto * successP = resolvedResult.tryGetSuccess()) {
             auto & success = *successP;
             if (!drv->outputs.contains(wantedOutput))
-                throw Error(
+                throw UnstructuredError(
                     "derivation '%s' doesn't have expected output '%s' (derivation-goal.cc/resolve)",
                     worker.store.printStorePath(drvPath),
                     wantedOutput);
@@ -204,7 +204,7 @@ Goal::Co DerivationGoal::haveDerivation(bool storeDerivation)
                 if (take2)
                     return *take2;
 
-                throw Error(
+                throw UnstructuredError(
                     "derivation '%s' doesn't have expected output '%s' (derivation-goal.cc/realisation)",
                     worker.store.printStorePath(pathResolved),
                     wantedOutput);
@@ -253,7 +253,7 @@ Goal::Co DerivationGoal::haveDerivation(bool storeDerivation)
                         }();
                         auto outMapPath = outMap.find(built.output);
                         if (outMapPath == outMap.end()) {
-                            throw Error(
+                            throw UnstructuredError(
                                 "derivation '%s' requires non-existent output '%s' from input derivation '%s'",
                                 worker.store.printStorePath(drvPath),
                                 built.output,
@@ -404,7 +404,7 @@ Goal::Co DerivationGoal::repairClosure()
     if (haveWaitees) {
         trace("closure repaired");
         if (nrFailed > 0)
-            throw Error(
+            throw UnstructuredError(
                 "some paths in the output closure of derivation '%s' could not be repaired",
                 worker.store.printStorePath(drvPath));
     }
@@ -427,7 +427,7 @@ std::optional<std::pair<UnkeyedRealisation, PathStatus>> DerivationGoal::checkPa
             };
         }
     } else {
-        throw Error(
+        throw UnstructuredError(
             "derivation '%s' does not have wanted outputs '%s'", worker.store.printStorePath(drvPath), wantedOutput);
     }
 
@@ -472,7 +472,7 @@ UnkeyedRealisation DerivationGoal::assertPathValidity()
 {
     auto checkResult = checkPathValidity();
     if (!(checkResult && checkResult->second == PathStatus::Valid))
-        throw Error("some outputs are unexpectedly invalid");
+        throw UnstructuredError("some outputs are unexpectedly invalid");
     return checkResult->first;
 }
 

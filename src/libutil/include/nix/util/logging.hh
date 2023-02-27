@@ -160,12 +160,16 @@ public:
         log(lvlInfo, s);
     }
 
-    virtual void logEI(const ErrorInfo & ei) noexcept = 0;
+    /**
+     * Log an error, given its metadata and its message separately.
+     * See `ErrorInfo` for why the two are apart.
+     */
+    virtual void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept = 0;
 
-    void logEI(Verbosity lvl, ErrorInfo ei) noexcept
+    void logEI(Verbosity lvl, ErrorInfo ei, const HintFmt & msg) noexcept
     {
         ei.level = lvl;
-        logEI(ei);
+        logEI(ei, msg);
     }
 
     virtual void warn(const std::string & msg) noexcept;
@@ -338,15 +342,61 @@ extern Verbosity verbosity;
  * intervention or that need more explanation.  Use the 'print' macros for more
  * lightweight status messages.
  */
-#define logErrorInfo(level, errorInfo...)      \
-    do {                                       \
-        if ((level) <= nix::verbosity) {       \
-            logger->logEI((level), errorInfo); \
-        }                                      \
+#define logErrorInfo(level, errorInfo, msg)           \
+    do {                                              \
+        if ((level) <= nix::verbosity) {              \
+            logger->logEI((level), errorInfo, (msg)); \
+        }                                             \
     } while (0)
 
-#define logError(errorInfo...) logErrorInfo(lvlError, errorInfo)
-#define logWarning(errorInfo...) logErrorInfo(lvlWarn, errorInfo)
+#define logError(errorInfo, msg) logErrorInfo(lvlError, errorInfo, msg)
+#define logWarning(errorInfo, msg) logErrorInfo(lvlWarn, errorInfo, msg)
+
+/**
+ * Log an exception, at the given level rather than the one it carries.
+ * The usual way to report a caught `Error` to the user.
+ */
+inline void logEx(Verbosity level, const BaseError & e) noexcept
+{
+    if (level <= verbosity)
+        logger->logEI(level, e.info(), e.renderMessage());
+}
+
+inline void logExError(const BaseError & e) noexcept
+{
+    logEx(lvlError, e);
+}
+
+inline void logExWarning(const BaseError & e) noexcept
+{
+    logEx(lvlWarn, e);
+}
+
+/**
+ * Same, for an exception held in an `std::exception_ptr`. It must be a
+ * `BaseError`, as is the case for one caught as such and saved with
+ * `std::current_exception()`.
+ */
+inline void logEx(Verbosity level, const std::exception_ptr & e) noexcept
+{
+    try {
+        std::rethrow_exception(e);
+    } catch (BaseError & e2) {
+        logEx(level, e2);
+    } catch (...) {
+        unreachable();
+    }
+}
+
+inline void logExError(const std::exception_ptr & e) noexcept
+{
+    logEx(lvlError, e);
+}
+
+inline void logExWarning(const std::exception_ptr & e) noexcept
+{
+    logEx(lvlWarn, e);
+}
 
 /**
  * Print a string message if the current log level is at least the specified

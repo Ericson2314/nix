@@ -80,7 +80,7 @@ FlakeRef parseFlakeRef(
 {
     auto [flakeRef, fragment] = parseFlakeRefWithFragment(url, baseDir, allowMissing, isFlake, preserveRelativePaths);
     if (fragment != "")
-        throw Error("unexpected fragment '%s' in flake reference '%s'", fragment, url);
+        throw UnstructuredError("unexpected fragment '%s' in flake reference '%s'", fragment, url);
     return flakeRef;
 }
 
@@ -107,7 +107,7 @@ std::pair<FlakeRef, std::string> parsePathFlakeRefWithFragment(
     std::match_results<std::string_view::const_iterator> match;
     auto succeeds = std::regex_match(url.begin(), url.end(), match, pathFlakeRegex);
     if (!succeeds)
-        throw Error("invalid flakeref '%s'", url);
+        throw UnstructuredError("invalid flakeref '%s'", url);
     std::filesystem::path path = match[1].str();
     auto query = decodeQuery(match[3].str(), /*lenient=*/true);
     auto fragment = percentDecode(match[5].str());
@@ -147,12 +147,12 @@ std::pair<FlakeRef, std::string> parsePathFlakeRefWithFragment(
                         found = true;
                         break;
                     } else if (pathExists(path / ".git"))
-                        throw Error(
+                        throw UnstructuredError(
                             "path %s is not part of a flake (neither it nor its parent directories contain a 'flake.nix' file)",
                             PathFmt(path));
                     else {
                         if (lstat(path).st_dev != device)
-                            throw Error(
+                            throw UnstructuredError(
                                 "unable to find a flake before encountering filesystem boundary at %s", PathFmt(path));
                     }
                     path = path.parent_path();
@@ -179,7 +179,7 @@ std::pair<FlakeRef, std::string> parsePathFlakeRefWithFragment(
 
                     if (subdir != "") {
                         if (parsedURL.query.count("dir"))
-                            throw Error("flake URL '%s' has an inconsistent 'dir' parameter", url);
+                            throw UnstructuredError("flake URL '%s' has an inconsistent 'dir' parameter", url);
                         parsedURL.query.insert_or_assign("dir", subdir);
                     }
 

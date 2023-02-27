@@ -79,7 +79,7 @@ struct CmdEval : MixJSON, InstallableValueCommand, MixReadOnlyOption
             logger->stop();
 
             if (pathExists(*writeTo))
-                throw Error("path '%s' already exists", writeTo->string());
+                throw UnstructuredError("path '%s' already exists", writeTo->string());
 
             [&](this const auto & recurse, Value & v, const PosIdx pos, const std::filesystem::path & path) -> void {
                 state->forceValue(v, pos);
@@ -94,7 +94,7 @@ struct CmdEval : MixJSON, InstallableValueCommand, MixReadOnlyOption
                         std::string_view name = state->symbols[attr.name];
                         try {
                             if (name == "." || name == "..")
-                                throw Error("invalid file name '%s'", name);
+                                throw UnstructuredError("invalid file name '%s'", name);
                             recurse(*attr.value, attr.pos, path / name);
                         } catch (Error & e) {
                             e.addTrace(

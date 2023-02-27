@@ -161,7 +161,7 @@ struct RealisedPath
     auto operator<=>(const RealisedPath &) const = default;
 };
 
-class MissingRealisation final : public CloneableError<MissingRealisation, Error>
+class MissingRealisation final : public CloneableError<MissingRealisation, UnstructuredError>
 {
     void anchor() override;
 

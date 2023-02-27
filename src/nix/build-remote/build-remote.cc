@@ -382,7 +382,7 @@ static int main_build_remote(int argc, char ** argv)
                             ? " You can re-run the command with `--builders ''` to disable remote building for this invocation."
                             : "");
                 }
-                throw Error(
+                throw UnstructuredError(
                     "build of '%s' on '%s' failed: %s", store->printStorePath(*drvPath), storeUri, failureP->message());
             }
         } else {

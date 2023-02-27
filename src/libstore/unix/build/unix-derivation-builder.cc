@@ -211,9 +211,9 @@ void rethrowExceptionAsError()
     } catch (Error &) {
         throw;
     } catch (std::exception & e) {
-        throw Error(e.what());
+        throw UnstructuredError(e.what());
     } catch (...) {
-        throw Error("unknown exception");
+        throw UnstructuredError("unknown exception");
     }
 }
 
@@ -237,7 +237,8 @@ static void checkNotWorldWritable(std::filesystem::path path)
     while (true) {
         auto st = lstat(path);
         if (st.st_mode & S_IWOTH)
-            throw Error("Path %s is world-writable or a symlink. That's not allowed for security.", PathFmt(path));
+            throw UnstructuredError(
+                "Path %s is world-writable or a symlink. That's not allowed for security.", PathFmt(path));
         if (path == path.parent_path())
             break;
         path = path.parent_path();
@@ -342,7 +343,7 @@ std::optional<Descriptor> UnixDerivationBuilderImpl::startBuild()
     prepareSandbox();
 
     if (needsHashRewrite() && pathExists(homeDir))
-        throw Error(
+        throw UnstructuredError(
             "home directory %1% exists; please remove it to assure purity of builds without sandboxing",
             PathFmt(homeDir));
 
@@ -353,7 +354,7 @@ std::optional<Descriptor> UnixDerivationBuilderImpl::startBuild()
     usingSubmitted = requiredFeatures.count(drvFeatureBuilderRpcV0);
 
     if (usingSubmitted && !type(drv).isCA()) {
-        throw Error("The builder-rpc-v0 feature may only be used with content-addressing derivations");
+        throw UnstructuredError("The builder-rpc-v0 feature may only be used with content-addressing derivations");
     }
 
     if (usingSubmitted || requiredFeatures.count("recursive-nix"))
@@ -409,7 +410,7 @@ PathsInChroot UnixDerivationBuilderImpl::getPathsInSandbox()
     PathsInChroot pathsInChroot = defaultPathsInChroot;
 
     if (hasPrefix(store->storeDir, tmpDirInSandbox().native())) {
-        throw Error("`sandbox-build-dir` must not contain the storeDir");
+        throw UnstructuredError("`sandbox-build-dir` must not contain the storeDir");
     }
     pathsInChroot[tmpDirInSandbox()] = {.source = tmpDir};
 
@@ -433,7 +434,7 @@ PathsInChroot UnixDerivationBuilderImpl::getPathsInSandbox()
             }
         }
         if (!found)
-            throw Error(
+            throw UnstructuredError(
                 "derivation '%s' requested impure path '%s', but it was not in allowed-impure-host-deps",
                 store->printStorePath(drvPath),
                 i);
@@ -458,7 +459,7 @@ PathsInChroot UnixDerivationBuilderImpl::getPathsInSandbox()
                 if (line == "extra-sandbox-paths" || line == "extra-chroot-dirs") {
                     state = stExtraChrootDirs;
                 } else {
-                    throw Error("unknown pre-build hook command '%1%'", line);
+                    throw UnstructuredError("unknown pre-build hook command '%1%'", line);
                 }
             } else if (state == stExtraChrootDirs) {
                 if (line == "") {
@@ -480,7 +481,7 @@ PathsInChroot UnixDerivationBuilderImpl::getPathsInSandbox()
 void UnixDerivationBuilderImpl::prepareSandbox()
 {
     if (drvOptions.useUidRange(drv))
-        throw Error("feature 'uid-range' is not supported on this platform");
+        throw UnstructuredError("feature 'uid-range' is not supported on this platform");
 }
 
 void UnixDerivationBuilderImpl::openSlave()
@@ -794,14 +795,14 @@ void UnixDerivationBuilderImpl::submitOutput(const SingleDerivedPath & path, con
 
     auto * opaque = std::get_if<SingleDerivedPath::Opaque>(&path.raw());
     if (!opaque)
-        throw Error(
+        throw UnstructuredError(
             "Attempted to submit Built path '%s' for output '%s'.\n"
             " Only Opaque paths are supported, see https://github.com/NixOS/nix/issues/12727",
             path.to_string(*store),
             output);
 
     if (submittedOutputs->contains(output))
-        throw Error(
+        throw UnstructuredError(
             "Attempted to submit duplicate output '%s' (old '%s', new '%s')",
             output,
             store->printStorePath(*get(*submittedOutputs, output)),
@@ -916,7 +917,7 @@ void UnixDerivationBuilderImpl::runChild(RunChildArgs args)
                 if (auto builtin = get(RegisterBuiltinBuilder::builtinBuilders(), builtinName))
                     (*builtin)(ctx);
                 else
-                    throw Error("unsupported builtin builder '%1%'", builtinName);
+                    throw UnstructuredError("unsupported builtin builder '%1%'", builtinName);
                 _exit(0);
             } catch (std::exception & e) {
                 writeFull(STDERR_FILENO, e.what() + std::string("\n"));
@@ -1066,13 +1067,13 @@ std::unique_ptr<DerivationBuilder, DerivationBuilderDeleter> makeDerivationBuild
     {
         if (localSettings.sandboxMode == smEnabled) {
             if (params.drvOptions.noChroot)
-                throw Error(
+                throw UnstructuredError(
                     "derivation '%s' has '__noChroot' set, "
                     "but that's not allowed when 'sandbox' is 'true'",
                     storeDirConfig.printStorePath(params.drvPath));
 #ifdef __APPLE__
             if (params.drvOptions.additionalSandboxProfile != "")
-                throw Error(
+                throw UnstructuredError(
                     "derivation '%s' specifies a sandbox profile, "
                     "but this is only allowed when 'sandbox' is 'relaxed'",
                     storeDirConfig.printStorePath(params.drvPath));
@@ -1091,18 +1092,18 @@ std::unique_ptr<DerivationBuilder, DerivationBuilderDeleter> makeDerivationBuild
 #if defined(__linux__) || defined(__FreeBSD__)
         useSandbox = true;
 #else
-        throw Error("building using a diverted store is not supported on this platform");
+        throw UnstructuredError("building using a diverted store is not supported on this platform");
 #endif
     }
 
 #ifdef __linux__
     if (useSandbox && !mountAndPidNamespacesSupported()) {
         if (!localSettings.sandboxFallback)
-            throw Error(
+            throw UnstructuredError(
                 "this system does not support the kernel namespaces that are required for sandboxing; use '--no-sandbox' to disable sandboxing");
 
         if (isRelocatedStore)
-            throw Error(
+            throw UnstructuredError(
                 "this system does not support the kernel namespaces that are required for sandboxing, which is required for building in a diverted store");
 
         static std::atomic<bool> warned = false;
@@ -1116,7 +1117,7 @@ std::unique_ptr<DerivationBuilder, DerivationBuilderDeleter> makeDerivationBuild
 #endif
 
     if (!useSandbox && params.drvOptions.useUidRange(params.drv))
-        throw Error("feature 'uid-range' is only supported in sandboxed builds");
+        throw UnstructuredError("feature 'uid-range' is only supported in sandboxed builds");
 
 #ifdef __APPLE__
     return DerivationBuilderUnique(new DarwinDerivationBuilder(store, miscMethods, std::move(params), useSandbox));
@@ -1132,7 +1133,7 @@ std::unique_ptr<DerivationBuilder, DerivationBuilderDeleter> makeDerivationBuild
     return DerivationBuilderUnique(new FreeBSDDerivationBuilder(store, miscMethods, std::move(params)));
 #else
     if (useSandbox)
-        throw Error("sandboxing builds is not supported on this platform");
+        throw UnstructuredError("sandboxing builds is not supported on this platform");
 
     return DerivationBuilderUnique(new UnixDerivationBuilderImpl(store, miscMethods, std::move(params)));
 #endif
