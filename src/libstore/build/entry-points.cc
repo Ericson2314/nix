@@ -20,7 +20,7 @@ void Store::buildPaths(const std::vector<DerivedPath> & reqs, BuildMode buildMod
     for (auto & i : goals) {
         if (i->ex) {
             if (ex)
-                logError(i->ex->info());
+                logExError(*i->ex);
             else
                 ex = std::move(i->ex);
         }
@@ -34,7 +34,7 @@ void Store::buildPaths(const std::vector<DerivedPath> & reqs, BuildMode buildMod
         ex->status = worker.exitStatus();
         throw std::move(*ex);
     } else if (!failed.empty()) {
-        if (ex) logError(ex->info());
+        if (ex) logExError(*ex);
         throw Error(worker.exitStatus(), "build of %s failed", showPaths(failed));
     }
 }

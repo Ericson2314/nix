@@ -372,7 +372,7 @@ Sink & operator << (Sink & sink, const Error & ex)
         << "Error"
         << info.level
         << "Error" // removed
-        << info.msg.str()
+        << ex.message.str()
         << 0 // FIXME: info.errPos
         << info.traces.size();
     for (auto & trace : info.traces) {
@@ -441,10 +441,10 @@ Error readError(Source & source)
     assert(type == "Error");
     auto level = (Verbosity) readInt(source);
     auto name = readString(source); // removed
-    auto msg = readString(source);
+    auto msg0 = readString(source);
+    auto msg = hintformat(fmt("%s", msg0));
     ErrorInfo info {
         .level = level,
-        .msg = hintformat(fmt("%s", msg)),
     };
     auto havePos = readNum<size_t>(source);
     assert(havePos == 0);
@@ -456,7 +456,7 @@ Error readError(Source & source)
             .hint = hintformat(fmt("%s", readString(source)))
         });
     }
-    return Error(std::move(info));
+    return Error(std::move(info), msg);
 }
 
 

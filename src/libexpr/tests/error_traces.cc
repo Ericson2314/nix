@@ -30,7 +30,7 @@ namespace nix {
                     throw;
                 }
             } catch (BaseError & e) {
-                ASSERT_EQ(PrintToString(e.info().msg),
+                ASSERT_EQ(PrintToString(e.message),
                           PrintToString(hintfmt("Not much")));
                 auto trace = e.info().traces.rbegin();
                 ASSERT_EQ(e.info().traces.size(), 2);
@@ -61,7 +61,7 @@ namespace nix {
         }
     }
 
-#define ASSERT_TRACE1(args, type, message)                                  \
+#define ASSERT_TRACE1(args, type, _message)                                 \
         ASSERT_THROW(                                                       \
             std::string expr(args);                                         \
             std::string name = expr.substr(0, expr.find(" "));              \
@@ -69,8 +69,8 @@ namespace nix {
                 Value v = eval("builtins." args);                           \
                 state.forceValueDeep(v);                                    \
             } catch (BaseError & e) {                                       \
-                ASSERT_EQ(PrintToString(e.info().msg),                      \
-                          PrintToString(message));                          \
+                ASSERT_EQ(PrintToString(e.message),                         \
+                          PrintToString(_message));                         \
                 ASSERT_EQ(e.info().traces.size(), 1) << "while testing " args << std::endl << e.what(); \
                 auto trace = e.info().traces.rbegin();                      \
                 ASSERT_EQ(PrintToString(trace->hint),                       \
@@ -80,7 +80,7 @@ namespace nix {
             , type                                                          \
         )
 
-#define ASSERT_TRACE2(args, type, message, context)                         \
+#define ASSERT_TRACE2(args, type, _message, context)                        \
         ASSERT_THROW(                                                       \
             std::string expr(args);                                         \
             std::string name = expr.substr(0, expr.find(" "));              \
@@ -88,8 +88,8 @@ namespace nix {
                 Value v = eval("builtins." args);                           \
                 state.forceValueDeep(v);                                    \
             } catch (BaseError & e) {                                       \
-                ASSERT_EQ(PrintToString(e.info().msg),                      \
-                          PrintToString(message));                          \
+                ASSERT_EQ(PrintToString(e.message),                         \
+                          PrintToString(_message));                         \
                 ASSERT_EQ(e.info().traces.size(), 2) << "while testing " args << std::endl << e.what(); \
                 auto trace = e.info().traces.rbegin();                      \
                 ASSERT_EQ(PrintToString(trace->hint),                       \

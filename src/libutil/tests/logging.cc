@@ -84,7 +84,7 @@ namespace nix {
         }
         catch (SysError &e) {
             testing::internal::CaptureStderr();
-            logError(e.info());
+            logExError(e);
             auto str = testing::internal::GetCapturedStderr();
 
             ASSERT_STREQ(str.c_str(), "\x1B[31;1merror:\x1B[0m\x1B[34;1m --- SysError --- error-unit-test\x1B[0m\nstatting file: \x1B[33;1mBad file descriptor\x1B[0m\n");
@@ -277,7 +277,7 @@ namespace nix {
 
         loggerSettings.showTrace.assign(true);
 
-        logError(e.info());
+        logExError(e);
 
         auto str = testing::internal::GetCapturedStderr();
         ASSERT_STREQ(str.c_str(), "\x1B[31;1merror:\x1B[0m\x1B[34;1m --- AssertionError --- error-unit-test\x1B[0m\n\x1B[34;1mat: \x1B[33;1m(2:13)\x1B[34;1m from string\x1B[0m\n\nshow-traces\n\n     1| previous line of code\n     2| this is the problem line of code\n      |             \x1B[31;1m^\x1B[0m\n     3| next line of code\n\nit has been \x1B[33;1mzero\x1B[0m days since our last error\n\x1B[34;1m---- show-trace ----\x1B[0m\n\x1B[34;1mtrace: \x1B[0mwhile trying to compute \x1B[33;1m42\x1B[0m\n\x1B[34;1mat: \x1B[33;1m(1:19)\x1B[34;1m from stdin\x1B[0m\n\n     1| this is the other problem line of code\n      |                   \x1B[31;1m^\x1B[0m\n\n\x1B[34;1mtrace: \x1B[0mwhile doing something without a \x1B[33;1mpos\x1B[0m\n\x1B[34;1mtrace: \x1B[0mmissing \x1B[33;1mnix file\x1B[0m\n\x1B[34;1mat: \x1B[33;1m(100:1)\x1B[34;1m in file: \x1B[0minvalid filename\n");
@@ -303,7 +303,7 @@ namespace nix {
 
         loggerSettings.showTrace.assign(false);
 
-        logError(e.info());
+        logExError(e);
 
         auto str = testing::internal::GetCapturedStderr();
         ASSERT_STREQ(str.c_str(), "\x1B[31;1merror:\x1B[0m\x1B[34;1m --- AssertionError --- error-unit-test\x1B[0m\n\x1B[34;1mat: \x1B[33;1m(2:13)\x1B[34;1m from string\x1B[0m\n\nhide traces\n\n     1| previous line of code\n     2| this is the problem line of code\n      |             \x1B[31;1m^\x1B[0m\n     3| next line of code\n\nit has been \x1B[33;1mzero\x1B[0m days since our last error\n");

@@ -878,7 +878,7 @@ void EvalState::runDebugRepl(const Error * error, const Env & env, const Expr & 
                 .pos = error->info().errPos ? error->info().errPos : static_cast<std::shared_ptr<AbstractPos>>(positions[expr.getPos()]),
                 .expr = expr,
                 .env = env,
-                .hint = error->info().msg,
+                .hint = error->message,
                 .isError = true
             })
         : nullptr;

@@ -9,23 +9,28 @@ namespace nix {
 
 const std::string nativeSystem = SYSTEM;
 
-void BaseError::addTrace(std::shared_ptr<AbstractPos> && e, hintformat hint, bool frame)
+void Base0Error::addTrace(std::shared_ptr<AbstractPos> && e, hintformat hint, bool frame)
 {
     err.traces.push_front(Trace { .pos = std::move(e), .hint = hint, .frame = frame });
 }
 
 // c++ std::exception descendants must have a 'const char* what()' function.
 // This stringifies the error and caches it for use by what(), or similarly by msg().
-const std::string & BaseError::calcWhat() const
+const std::string & Base0Error::calcWhat() const
 {
     if (what_.has_value())
         return *what_;
     else {
-        std::ostringstream oss;
-        showErrorInfo(oss, err, loggerSettings.showTrace);
-        what_ = oss.str();
+        what_ = calcWhatUncached();
         return *what_;
     }
+}
+
+std::string BaseError::calcWhatUncached() const
+{
+    std::ostringstream oss;
+    showErrorInfo(oss, err, message, loggerSettings.showTrace);
+    return oss.str();
 }
 
 std::optional<std::string> ErrorInfo::programName = std::nullopt;
@@ -150,7 +155,11 @@ static std::string indent(std::string_view indentFirst, std::string_view indentR
     return res;
 }
 
-std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool showTrace)
+std::ostream & showErrorInfo(
+    std::ostream & out,
+    const ErrorInfo & einfo,
+    std::function<void(std::ostringstream & oss)> msg,
+    bool showTrace)
 {
     std::string prefix;
     switch (einfo.level) {
@@ -331,7 +340,9 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
         oss << "\n" << prefix;
     }
 
-    oss << einfo.msg << "\n";
+    msg(oss);
+
+    oss << "\n";
 
     if (einfo.errPos) {
         oss << "\n" << ANSI_BLUE << "at " ANSI_WARNING << *einfo.errPos << ANSI_NORMAL << ":";
@@ -354,5 +365,20 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
     out << indent(prefix, std::string(filterANSIEscapes(prefix, true).size(), ' '), chomp(oss.str()));
 
     return out;
+}
+
+std::ostream & showErrorInfo(
+    std::ostream & out,
+    const ErrorInfo & einfo,
+    hintformat msg,
+    bool showTrace)
+{
+    return showErrorInfo(
+        out,
+        einfo,
+        [&](std::ostringstream & oss) {
+            oss << msg;
+        },
+        showTrace);
 }
 }

@@ -86,12 +86,12 @@ public:
         log(lvlInfo, s);
     }
 
-    virtual void logEI(const ErrorInfo & ei) = 0;
+    virtual void logEI(const ErrorInfo & ei, hintformat msg) = 0;
 
-    void logEI(Verbosity lvl, ErrorInfo ei)
+    void logEI(Verbosity lvl, ErrorInfo ei, hintformat msg)
     {
         ei.level = lvl;
-        logEI(ei);
+        logEI(ei, msg);
     }
 
     virtual void warn(const std::string & msg);
@@ -194,15 +194,24 @@ extern Verbosity verbosity;
  * intervention or that need more explanation.  Use the 'print' macros for more
  * lightweight status messages.
  */
-#define logErrorInfo(level, errorInfo...) \
+#define logErrorInfo(level, errorInfo, msg...) \
     do { \
         if ((level) <= nix::verbosity) {     \
-            logger->logEI((level), errorInfo);  \
+            logger->logEI((level), errorInfo, msg);  \
         } \
     } while (0)
 
-#define logError(errorInfo...) logErrorInfo(lvlError, errorInfo)
-#define logWarning(errorInfo...) logErrorInfo(lvlWarn, errorInfo)
+#define logError(errorInfo, msg...) logErrorInfo(lvlError, errorInfo, msg)
+#define logWarning(errorInfo, msg...) logErrorInfo(lvlWarn, errorInfo, msg)
+
+#define logEx(level, error) \
+    ({ \
+        auto __error = std::move(error); \
+        logErrorInfo(level, __error.info(), __error.message); \
+    })
+
+#define logExError(error) logEx(lvlError, error)
+#define logExWarning(error) logEx(lvlWarn, error)
 
 /**
  * Print a string message if the current log level is at least the specified

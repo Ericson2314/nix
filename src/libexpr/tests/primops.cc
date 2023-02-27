@@ -19,8 +19,8 @@ namespace nix {
                 oss << s << std::endl;
             }
 
-            void logEI(const ErrorInfo & ei) override {
-                showErrorInfo(oss, ei, loggerSettings.showTrace.get());
+            void logEI(const ErrorInfo & ei, hintformat msg) override {
+                showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
             }
     };
 

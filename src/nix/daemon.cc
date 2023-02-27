@@ -373,8 +373,8 @@ static void daemonLoop(std::optional<TrustedFlag> forceTrustClientOpt)
         } catch (Error & error) {
             auto ei = error.info();
             // FIXME: add to trace?
-            ei.msg = hintfmt("error processing connection: %1%", ei.msg.str());
-            logError(ei);
+            auto msg = hintfmt("error processing connection: %1%", error.message.str());
+            logError(ei, msg);
         }
     }
 }

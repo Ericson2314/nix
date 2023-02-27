@@ -145,12 +145,12 @@ public:
         log(*state, lvl, s);
     }
 
-    void logEI(const ErrorInfo & ei) override
+    void logEI(const ErrorInfo & ei, hintformat msg) override
     {
         auto state(state_.lock());
 
         std::stringstream oss;
-        showErrorInfo(oss, ei, loggerSettings.showTrace.get());
+        showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
 
         log(*state, ei.level, oss.str());
     }

@@ -244,7 +244,7 @@ void NixRepl::mainLoop()
     try {
         createDirs(dirOf(historyFile));
     } catch (SysError & e) {
-        logWarning(e.info());
+        logExWarning(e);
     }
 #ifndef READLINE
     el_hist_size = 1000;

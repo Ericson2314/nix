@@ -94,15 +94,18 @@ class ErrorBuilder
     private:
         EvalState & state;
         ErrorInfo info;
+        hintformat message;
 
-        ErrorBuilder(EvalState & s, ErrorInfo && i): state(s), info(i) { }
+        ErrorBuilder(EvalState & s, hintformat && message)
+            : state(s), message(message)
+        { }
 
     public:
         template<typename... Args>
         [[nodiscard, gnu::noinline]]
         static ErrorBuilder * create(EvalState & s, const Args & ... args)
         {
-            return new ErrorBuilder(s, ErrorInfo { .msg = hintfmt(args...) });
+            return new ErrorBuilder(s, hintfmt(args...));
         }
 
         [[nodiscard, gnu::noinline]]
@@ -756,7 +759,7 @@ template<class ErrorType>
 void ErrorBuilder::debugThrow()
 {
     // NOTE: We always use the -LastTrace version as we push the new trace in withFrame()
-    state.debugThrowLastTrace(ErrorType(info));
+    state.debugThrowLastTrace(ErrorType { info, message });
 }
 
 }

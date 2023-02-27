@@ -1581,7 +1581,7 @@ bool LocalStore::verifyStore(bool checkContents, RepairFlag repair)
                 /* It's possible that the path got GC'ed, so ignore
                    errors on invalid paths. */
                 if (isValidPath(i))
-                    logError(e.info());
+                    logExError(e);
                 else
                     warn(e.msg());
                 errors = true;
@@ -1629,7 +1629,7 @@ void LocalStore::verifyPath(const Path & pathS, const StringSet & store,
                 try {
                     repairPath(path);
                 } catch (Error & e) {
-                    logWarning(e.info());
+                    logExWarning(e);
                     errors = true;
                 }
             else errors = true;

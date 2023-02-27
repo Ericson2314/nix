@@ -119,7 +119,7 @@ void PathSubstitutionGoal::tryNext()
         throw;
     } catch (Error & e) {
         if (settings.tryFallback) {
-            logError(e.info());
+            logExError(e);
             tryNext();
             return;
         }

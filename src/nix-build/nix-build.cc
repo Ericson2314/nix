@@ -400,7 +400,7 @@ static void main_nix_build(int argc, char * * argv)
                 shellDrv = bashDrv;
 
             } catch (Error & e) {
-                logError(e.info());
+                logExError(e);
                 notice("will use bash from your environment");
                 shell = "bash";
             }

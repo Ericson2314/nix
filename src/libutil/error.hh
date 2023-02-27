@@ -98,7 +98,6 @@ struct Trace {
 
 struct ErrorInfo {
     Verbosity level;
-    hintformat msg;
     std::shared_ptr<AbstractPos> errPos;
     std::list<Trace> traces;
 
@@ -107,55 +106,47 @@ struct ErrorInfo {
     static std::optional<std::string> programName;
 };
 
-std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool showTrace);
+std::ostream & showErrorInfo(
+    std::ostream & out,
+    const ErrorInfo & einfo,
+    std::function<void(std::ostringstream & oss)> msg,
+    bool showTrace);
+/* Convenience for the common case. */
+std::ostream & showErrorInfo(
+    std::ostream & out,
+    const ErrorInfo & einfo,
+    hintformat msg,
+    bool showTrace);
 
-/**
- * BaseError should generally not be caught, as it has Interrupted as
- * a subclass. Catch Error instead.
- */
-class BaseError : public std::exception
+class Base0Error : public std::exception
 {
 protected:
     mutable ErrorInfo err;
 
     mutable std::optional<std::string> what_;
     const std::string & calcWhat() const;
+    virtual std::string calcWhatUncached() const = 0;
+
+    Base0Error(const Base0Error &) = default;
+
+    Base0Error(unsigned int status, ErrorInfo && e)
+        : err(std::move(e))
+        , status(status)
+    { }
+
+    Base0Error(ErrorInfo && e)
+        : err(std::move(e))
+    { }
+
+    Base0Error(const ErrorInfo & e)
+        : err(e)
+    { }
 
 public:
     unsigned int status = 1; // exit status
 
-    BaseError(const BaseError &) = default;
-
-    template<typename... Args>
-    BaseError(unsigned int status, const Args & ... args)
-        : err { .level = lvlError, .msg = hintfmt(args...) }
-        , status(status)
-    { }
-
-    template<typename... Args>
-    explicit BaseError(const std::string & fs, const Args & ... args)
-        : err { .level = lvlError, .msg = hintfmt(fs, args...) }
-    { }
-
-    template<typename... Args>
-    BaseError(const Suggestions & sug, const Args & ... args)
-        : err { .level = lvlError, .msg = hintfmt(args...), .suggestions = sug }
-    { }
-
-    BaseError(hintformat hint)
-        : err { .level = lvlError, .msg = hint }
-    { }
-
-    BaseError(ErrorInfo && e)
-        : err(std::move(e))
-    { }
-
-    BaseError(const ErrorInfo & e)
-        : err(e)
-    { }
-
 #ifdef EXCEPTION_NEEDS_THROW_SPEC
-    ~BaseError() throw () { };
+    ~Base0Error() throw () { };
     const char * what() const throw () { return calcWhat().c_str(); }
 #else
     const char * what() const noexcept override { return calcWhat().c_str(); }
@@ -182,6 +173,83 @@ public:
     const ErrorInfo & info() { return err; };
 };
 
+
+/**
+ * The old version of `ErrorInfo`, with a message.
+ *
+ * This is deprecated.
+ *
+ * This just exists for the sake of existing constructions of
+ * `BaseError` and derived types. Once those are all converted to
+ * something else (e.g. structured) we should get rid of this.
+ */
+struct ErrorInfoCompat {
+    Verbosity level;
+    hintformat msg;
+    std::shared_ptr<AbstractPos> errPos;
+    std::list<Trace> traces;
+
+    Suggestions suggestions;
+
+    static std::optional<std::string> programName;
+};
+
+
+/**
+ * Base0Error should generally not be caught, as it has `Interrupted` as
+ * a subclass. Catch `Error` instead.
+ */
+struct BaseError : Base0Error
+{
+    hintformat message;
+
+    /**
+     * Deprecated.
+     */
+    BaseError(ErrorInfoCompat && e)
+        : Base0Error(ErrorInfo {
+            .level = e.level,
+            .errPos = e.errPos,
+            .traces = e.traces,
+            .suggestions = e.suggestions,
+        })
+        , message(e.msg)
+    { }
+
+    BaseError(ErrorInfo && e, hintformat && message)
+        : Base0Error(e), message(message)
+    { }
+
+    BaseError(const ErrorInfo & e, const hintformat & message)
+        : Base0Error(e), message(message)
+    { }
+
+    template<typename... Args>
+    BaseError(unsigned int status, const Args & ... args)
+        : Base0Error(status, ErrorInfo { .level = lvlError })
+        , message(hintfmt(args...))
+    { }
+
+    template<typename... Args>
+    explicit BaseError(const std::string & fs, const Args & ... args)
+        : Base0Error(ErrorInfo { .level = lvlError })
+        , message(hintfmt(fs, args...))
+    { }
+
+    template<typename... Args>
+    BaseError(const Suggestions & sug, const Args & ... args)
+        : Base0Error(ErrorInfo { .level = lvlError, .suggestions = sug })
+        , message(hintfmt(args...))
+    { }
+
+    BaseError(hintformat hint)
+        : Base0Error(ErrorInfo { .level = lvlError })
+        , message(hint)
+    { }
+
+    std::string calcWhatUncached() const override;
+};
+
 #define MakeError(newClass, superClass) \
     class newClass : public superClass                  \
     {                                                   \
@@ -204,7 +272,7 @@ public:
     {
         errNo = errNo_;
         auto hf = hintfmt(args...);
-        err.msg = hintfmt("%1%: %2%", normaltxt(hf.str()), strerror(errNo));
+        message = hintfmt("%1%: %2%", normaltxt(hf.str()), strerror(errNo));
     }
 
     template<typename... Args>

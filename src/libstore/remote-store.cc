@@ -511,7 +511,7 @@ void RemoteStore::queryPathInfoUncached(const StorePath & path,
             } catch (Error & e) {
                 // Ugly backwards compatibility hack.
                 if (e.msg().find("is not valid") != std::string::npos)
-                    throw InvalidPath(std::move(e.info()));
+                    throw InvalidPath(std::move(e.info()), std::move(e.message));
                 throw;
             }
             if (GET_PROTOCOL_MINOR(conn->daemonVersion) >= 17) {

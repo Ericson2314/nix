@@ -85,7 +85,7 @@ void Goal::amDone(ExitCode result, std::optional<Error> ex)
 
     if (ex) {
         if (!waiters.empty())
-            logError(ex->info());
+            logExError(*ex);
         else
             this->ex = std::move(*ex);
     }

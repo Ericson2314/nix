@@ -744,7 +744,7 @@ static RegisterPrimOp primop_break({
     .fun = [](EvalState & state, const PosIdx pos, Value * * args, Value & v)
     {
         if (state.debugRepl && !state.debugTraces.empty()) {
-            auto error = Error(ErrorInfo {
+            auto error = Error({
                 .level = lvlInfo,
                 .msg = hintfmt("breakpoint reached"),
                 .errPos = state.positions[pos],
@@ -755,7 +755,7 @@ static RegisterPrimOp primop_break({
 
             if (state.debugQuit) {
                 // If the user elects to quit the repl, throw an exception.
-                throw Error(ErrorInfo{
+                throw Error({
                     .level = lvlInfo,
                     .msg = hintfmt("quit the debugger"),
                     .errPos = nullptr,

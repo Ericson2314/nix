@@ -357,7 +357,7 @@ void BinaryCacheStore::narFromPath(const StorePath & storePath, Sink & sink)
     try {
         getFile(info->url, *decompressor);
     } catch (NoSuchBinaryCacheFile & e) {
-        throw SubstituteGone(std::move(e.info()));
+        throw SubstituteGone(std::move(e.info()), e.message);
     }
 
     decompressor->finish();

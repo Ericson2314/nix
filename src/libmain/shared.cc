@@ -334,11 +334,11 @@ int handleExceptions(const std::string & programName, std::function<void()> fun)
     } catch (Exit & e) {
         return e.status;
     } catch (UsageError & e) {
-        logError(e.info());
+        logExError(e);
         printError("Try '%1% --help' for more information.", programName);
         return 1;
     } catch (BaseError & e) {
-        logError(e.info());
+        logExError(e);
         return e.status;
     } catch (std::bad_alloc & e) {
         printError(error + "out of memory");

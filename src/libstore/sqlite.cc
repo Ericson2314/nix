@@ -12,7 +12,7 @@ SQLiteError::SQLiteError(const char *path, const char *errMsg, int errNo, int ex
   : Error(""), path(path), errMsg(errMsg), errNo(errNo), extendedErrNo(extendedErrNo), offset(offset)
 {
     auto offsetStr = (offset == -1) ? "" : "at offset " + std::to_string(offset) + ": ";
-    err.msg = hintfmt("%s: %s%s, %s (in '%s')",
+    message = hintfmt("%s: %s%s, %s (in '%s')",
         normaltxt(hf.str()),
         offsetStr,
         sqlite3_errstr(extendedErrNo),
@@ -31,7 +31,7 @@ SQLiteError::SQLiteError(const char *path, const char *errMsg, int errNo, int ex
 
     if (err == SQLITE_BUSY || err == SQLITE_PROTOCOL) {
         auto exp = SQLiteBusy(path, errMsg, err, exterr, offset, std::move(hf));
-        exp.err.msg = hintfmt(
+        exp.message = hintfmt(
             err == SQLITE_PROTOCOL
                 ? "SQLite database '%s' is busy (SQLITE_PROTOCOL)"
                 : "SQLite database '%s' is busy",
@@ -244,9 +244,7 @@ void handleSQLiteBusy(const SQLiteBusy & e, time_t & nextWarning)
     time_t now = time(0);
     if (now > nextWarning) {
         nextWarning = now + 10;
-        logWarning({
-            .msg = hintfmt(e.what())
-        });
+        logExWarning(e);
     }
 
     /* Sleep for a while since retrying the transaction right away

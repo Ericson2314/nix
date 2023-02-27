@@ -1439,7 +1439,7 @@ void DerivationGoal::done(
 {
     buildResult.status = status;
     if (ex)
-        buildResult.errorMsg = fmt("%s", normaltxt(ex->info().msg));
+        buildResult.errorMsg = fmt("%s", normaltxt(ex->message));
     if (buildResult.status == BuildResult::TimedOut)
         worker.timedOut = true;
     if (buildResult.status == BuildResult::PermanentFailure)

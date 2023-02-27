@@ -965,7 +965,7 @@ int Pid::kill()
 #if __FreeBSD__ || __APPLE__
         if (errno != EPERM || ::kill(pid, 0) != 0)
 #endif
-            logError(SysError("killing process %d", pid).info());
+            logExError(SysError("killing process %d", pid));
     }
 
     return wait();

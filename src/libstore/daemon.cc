@@ -76,12 +76,12 @@ struct TunnelLogger : public Logger
         enqueueMsg(buf.s);
     }
 
-    void logEI(const ErrorInfo & ei) override
+    void logEI(const ErrorInfo & ei, hintformat msg) override
     {
         if (ei.level > verbosity) return;
 
         std::stringstream oss;
-        showErrorInfo(oss, ei, false);
+        showErrorInfo(oss, ei, msg, false);
 
         StringSink buf;
         buf << STDERR_NEXT << oss.str();

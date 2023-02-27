@@ -569,7 +569,7 @@ void Store::querySubstitutablePathInfos(const StorePathCAMap & paths, Substituta
             } catch (SubstituterDisabled &) {
             } catch (Error & e) {
                 if (settings.tryFallback)
-                    logError(e.info());
+                    logExError(e);
                 else
                     throw;
             }
@@ -794,7 +794,7 @@ void Store::substitutePaths(const StorePathSet & paths)
             for (auto & p : willSubstitute) subs.push_back(DerivedPath::Opaque{p});
             buildPaths(subs);
         } catch (Error & e) {
-            logWarning(e.info());
+            logExWarning(e);
         }
 }
 
@@ -1504,7 +1504,7 @@ std::list<ref<Store>> getDefaultSubstituters()
             try {
                 stores.push_back(openStore(uri));
             } catch (Error & e) {
-                logWarning(e.info());
+                logExWarning(e);
             }
         };
 

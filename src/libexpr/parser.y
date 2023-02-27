@@ -33,7 +33,7 @@ namespace nix {
         Expr * result;
         SourcePath basePath;
         PosTable::Origin origin;
-        std::optional<ErrorInfo> error;
+        std::optional<ParseError> error;
     };
 
     struct ParserFormals {
@@ -292,10 +292,10 @@ static inline PosIdx makeCurPos(const YYLTYPE & loc, ParseData * data)
 
 void yyerror(YYLTYPE * loc, yyscan_t scanner, ParseData * data, const char * error)
 {
-    data->error = {
+    data->error = ParseError {{
         .msg = hintfmt(error),
-        .errPos = data->state.positions[makeCurPos(*loc, data)]
-    };
+        .errPos = data->state.positions[makeCurPos(*loc, data)],
+    }};
 }
 
 
@@ -667,7 +667,7 @@ Expr * EvalState::parse(
     int res = yyparse(scanner, &data);
     yylex_destroy(scanner);
 
-    if (res) throw ParseError(data.error.value());
+    if (res) throw data.error.value();
 
     data.result->bindVars(*this, staticEnv);
 
@@ -796,9 +796,9 @@ std::pair<bool, std::string> EvalState::resolveSearchPathElem(const SearchPathEl
                 store, EvalSettings::resolvePseudoUrl(elem.second), "source", false).first.storePath;
             res = { true, store->toRealPath(storePath) };
         } catch (FileTransferError & e) {
-            logWarning({
+            logExWarning(Error{{
                 .msg = hintfmt("Nix search path entry '%1%' cannot be downloaded, ignoring", elem.second)
-            });
+            }});
             res = { false, "" };
         }
     }
@@ -816,9 +816,9 @@ std::pair<bool, std::string> EvalState::resolveSearchPathElem(const SearchPathEl
         if (pathExists(path))
             res = { true, path };
         else {
-            logWarning({
+            logExWarning(Error{{
                 .msg = hintfmt("Nix search path entry '%1%' does not exist, ignoring", elem.second)
-            });
+            }});
             res = { false, "" };
         }
     }

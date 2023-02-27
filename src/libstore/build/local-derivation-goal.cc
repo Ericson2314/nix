@@ -85,10 +85,10 @@ void handleDiffHook(
             if (diffRes.second != "")
                 printError(chomp(diffRes.second));
         } catch (Error & error) {
-            ErrorInfo ei = error.info();
+            Error e = error;
             // FIXME: wrap errors.
-            ei.msg = hintfmt("diff hook execution failed: %s", ei.msg.str());
-            logError(ei);
+            e.message = hintfmt("diff hook execution failed: %s", e.message.str());
+            logExError(e);
         }
     }
 }

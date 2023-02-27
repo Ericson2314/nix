@@ -76,10 +76,10 @@ public:
         writeToStderr(prefix + filterANSIEscapes(s, !tty) + "\n");
     }
 
-    void logEI(const ErrorInfo & ei) override
+    void logEI(const ErrorInfo & ei, hintformat msg) override
     {
         std::stringstream oss;
-        showErrorInfo(oss, ei, loggerSettings.showTrace.get());
+        showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
 
         log(ei.level, oss.str());
     }
@@ -184,16 +184,16 @@ struct JSONLogger : Logger {
         write(json);
     }
 
-    void logEI(const ErrorInfo & ei) override
+    void logEI(const ErrorInfo & ei, hintformat message) override
     {
         std::ostringstream oss;
-        showErrorInfo(oss, ei, loggerSettings.showTrace.get());
+        showErrorInfo(oss, ei, message, loggerSettings.showTrace.get());
 
         nlohmann::json json;
         json["action"] = "msg";
         json["level"] = ei.level;
         json["msg"] = oss.str();
-        json["raw_msg"] = ei.msg.str();
+        json["raw_msg"] = message.str();
         to_json(json, ei.errPos);
 
         if (loggerSettings.showTrace.get() && !ei.traces.empty()) {
