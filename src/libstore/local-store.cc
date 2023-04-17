@@ -44,6 +44,13 @@
 
 namespace nix {
 
+std::string LocalStoreConfig::doc()
+{
+    return
+        #include "local-store.md"
+        ;
+}
+
 struct LocalStore::State::Stmts {
     /* Some precompiled SQLite statements. */
     SQLiteStmt RegisterValidPath;
@@ -91,6 +98,7 @@ void migrateCASchema(SQLite& db, Path schemaPath, AutoCloseFD& lockFd)
 
         if (!lockFile(lockFd.get(), ltWrite, false)) {
             printInfo("waiting for exclusive access to the Nix store for ca drvs...");
+            lockFile(lockFd.get(), ltNone, false); // We have acquired a shared lock; release it to prevent deadlocks
             lockFile(lockFd.get(), ltWrite, true);
         }
 
@@ -200,8 +208,6 @@ LocalStore::LocalStore(const Params & params)
             throw SysError("could not set permissions on '%s' to 755", perUserDir);
     }
 
-    createUser(getUserName(), getuid());
-
     /* Optionally, create directories and set permissions for a
        multi-user install. */
     if (getuid() == 0 && settings.buildUsersGroup != "") {
@@ -281,7 +287,7 @@ LocalStore::LocalStore(const Params & params)
     else if (curSchema == 0) { /* new store */
         curSchema = nixSchemaVersion;
         openDB(*state, true);
-        writeFile(schemaPath, (format("%1%") % nixSchemaVersion).str(), 0666, true);
+        writeFile(schemaPath, fmt("%1%", nixSchemaVersion), 0666, true);
     }
 
     else if (curSchema < nixSchemaVersion) {
@@ -299,6 +305,7 @@ LocalStore::LocalStore(const Params & params)
 
         if (!lockFile(globalLock.get(), ltWrite, false)) {
             printInfo("waiting for exclusive access to the Nix store...");
+            lockFile(globalLock.get(), ltNone, false); // We have acquired a shared lock; release it to prevent deadlocks
             lockFile(globalLock.get(), ltWrite, true);
         }
 
@@ -329,14 +336,14 @@ LocalStore::LocalStore(const Params & params)
             txn.commit();
         }
 
-        writeFile(schemaPath, (format("%1%") % nixSchemaVersion).str(), 0666, true);
+        writeFile(schemaPath, fmt("%1%", nixSchemaVersion), 0666, true);
 
         lockFile(globalLock.get(), ltRead, true);
     }
 
     else openDB(*state, false);
 
-    if (settings.isExperimentalFeatureEnabled(Xp::CaDerivations)) {
+    if (experimentalFeatureSettings.isEnabled(Xp::CaDerivations)) {
         migrateCASchema(state->db, dbDir + "/ca-schema", globalLock);
     }
 
@@ -366,7 +373,7 @@ LocalStore::LocalStore(const Params & params)
     state->stmts->QueryPathFromHashPart.create(state->db,
         "select path from ValidPaths where path >= ? limit 1;");
     state->stmts->QueryValidPaths.create(state->db, "select path from ValidPaths");
-    if (settings.isExperimentalFeatureEnabled(Xp::CaDerivations)) {
+    if (experimentalFeatureSettings.isEnabled(Xp::CaDerivations)) {
         state->stmts->RegisterRealisedOutput.create(state->db,
             R"(
                 insert into Realisations (drvPath, outputName, outputPath, signatures)
@@ -413,6 +420,13 @@ LocalStore::LocalStore(const Params & params)
 }
 
 
+LocalStore::LocalStore(std::string scheme, std::string path, const Params & params)
+    : LocalStore(params)
+{
+    throw UnimplementedError("LocalStore");
+}
+
+
 AutoCloseFD LocalStore::openGCLock()
 {
     Path fnGCLock = stateDir + "/gc.lock";
@@ -439,9 +453,9 @@ LocalStore::~LocalStore()
     }
 
     try {
-        auto state(_state.lock());
-        if (state->fdTempRoots) {
-            state->fdTempRoots = -1;
+        auto fdTempRoots(_fdTempRoots.lock());
+        if (*fdTempRoots) {
+            *fdTempRoots = -1;
             unlink(fnTempRoots.c_str());
         }
     } catch (...) {
@@ -696,65 +710,9 @@ void canonicalisePathMetaData(const Path & path,
     canonicalisePathMetaData(path, uidRange, inodesSeen);
 }
 
-
-void LocalStore::checkDerivationOutputs(const StorePath & drvPath, const Derivation & drv)
-{
-    assert(drvPath.isDerivation());
-    std::string drvName(drvPath.name());
-    drvName = drvName.substr(0, drvName.size() - drvExtension.size());
-
-    auto envHasRightPath = [&](const StorePath & actual, const std::string & varName)
-    {
-        auto j = drv.env.find(varName);
-        if (j == drv.env.end() || parseStorePath(j->second) != actual)
-            throw Error("derivation '%s' has incorrect environment variable '%s', should be '%s'",
-                printStorePath(drvPath), varName, printStorePath(actual));
-    };
-
-
-    // Don't need the answer, but do this anyways to assert is proper
-    // combination. The code below is more general and naturally allows
-    // combinations that are currently prohibited.
-    drv.type();
-
-    std::optional<DrvHash> hashesModulo;
-    for (auto & i : drv.outputs) {
-        std::visit(overloaded {
-            [&](const DerivationOutput::InputAddressed & doia) {
-                if (!hashesModulo) {
-                    // somewhat expensive so we do lazily
-                    hashesModulo = hashDerivationModulo(*this, drv, true);
-                }
-                auto currentOutputHash = get(hashesModulo->hashes, i.first);
-                if (!currentOutputHash)
-                    throw Error("derivation '%s' has unexpected output '%s' (local-store / hashesModulo) named '%s'",
-                        printStorePath(drvPath), printStorePath(doia.path), i.first);
-                StorePath recomputed = makeOutputPath(i.first, *currentOutputHash, drvName);
-                if (doia.path != recomputed)
-                    throw Error("derivation '%s' has incorrect output '%s', should be '%s'",
-                        printStorePath(drvPath), printStorePath(doia.path), printStorePath(recomputed));
-                envHasRightPath(doia.path, i.first);
-            },
-            [&](const DerivationOutput::CAFixed & dof) {
-                StorePath path = makeFixedOutputPath(dof.hash.method, dof.hash.hash, drvName);
-                envHasRightPath(path, i.first);
-            },
-            [&](const DerivationOutput::CAFloating &) {
-                /* Nothing to check */
-            },
-            [&](const DerivationOutput::Deferred &) {
-                /* Nothing to check */
-            },
-            [&](const DerivationOutput::Impure &) {
-                /* Nothing to check */
-            },
-        }, i.second.raw());
-    }
-}
-
 void LocalStore::registerDrvOutput(const Realisation & info, CheckSigsFlag checkSigs)
 {
-    settings.requireExperimentalFeature(Xp::CaDerivations);
+    experimentalFeatureSettings.require(Xp::CaDerivations);
     if (checkSigs == NoCheckSigs || !realisationIsUntrusted(info))
         registerDrvOutput(info);
     else
@@ -763,7 +721,7 @@ void LocalStore::registerDrvOutput(const Realisation & info, CheckSigsFlag check
 
 void LocalStore::registerDrvOutput(const Realisation & info)
 {
-    settings.requireExperimentalFeature(Xp::CaDerivations);
+    experimentalFeatureSettings.require(Xp::CaDerivations);
     retrySQLite<void>([&]() {
         auto state(_state.lock());
         if (auto oldR = queryRealisation_(*state, info.id)) {
@@ -862,7 +820,7 @@ uint64_t LocalStore::addValidPath(State & state,
            derivations).  Note that if this throws an error, then the
            DB transaction is rolled back, so the path validity
            registration above is undone. */
-        if (checkOutputs) checkDerivationOutputs(info.path, drv);
+        if (checkOutputs) drv.checkInvariants(*this, info.path);
 
         for (auto & i : drv.outputsAndOptPaths(*this)) {
             /* Floating CA derivations have indeterminate output paths until
@@ -1052,7 +1010,7 @@ LocalStore::queryPartialDerivationOutputMap(const StorePath & path_)
         return outputs;
     });
 
-    if (!settings.isExperimentalFeatureEnabled(Xp::CaDerivations))
+    if (!experimentalFeatureSettings.isEnabled(Xp::CaDerivations))
         return outputs;
 
     auto drv = readInvalidDerivation(path);
@@ -1120,54 +1078,6 @@ StorePathSet LocalStore::querySubstitutablePaths(const StorePathSet & paths)
 }
 
 
-// FIXME: move this, it's not specific to LocalStore.
-void LocalStore::querySubstitutablePathInfos(const StorePathCAMap & paths, SubstitutablePathInfos & infos)
-{
-    if (!settings.useSubstitutes) return;
-    for (auto & sub : getDefaultSubstituters()) {
-        for (auto & path : paths) {
-            if (infos.count(path.first))
-                // Choose first succeeding substituter.
-                continue;
-
-            auto subPath(path.first);
-
-            // Recompute store path so that we can use a different store root.
-            if (path.second) {
-                subPath = makeFixedOutputPathFromCA(path.first.name(), *path.second);
-                if (sub->storeDir == storeDir)
-                    assert(subPath == path.first);
-                if (subPath != path.first)
-                    debug("replaced path '%s' with '%s' for substituter '%s'", printStorePath(path.first), sub->printStorePath(subPath), sub->getUri());
-            } else if (sub->storeDir != storeDir) continue;
-
-            debug("checking substituter '%s' for path '%s'", sub->getUri(), sub->printStorePath(subPath));
-            try {
-                auto info = sub->queryPathInfo(subPath);
-
-                if (sub->storeDir != storeDir && !(info->isContentAddressed(*sub) && info->references.empty()))
-                    continue;
-
-                auto narInfo = std::dynamic_pointer_cast<const NarInfo>(
-                    std::shared_ptr<const ValidPathInfo>(info));
-                infos.insert_or_assign(path.first, SubstitutablePathInfo{
-                    info->deriver,
-                    info->references,
-                    narInfo ? narInfo->fileSize : 0,
-                    info->narSize});
-            } catch (InvalidPath &) {
-            } catch (SubstituterDisabled &) {
-            } catch (Error & e) {
-                if (settings.tryFallback)
-                    logError(e.info());
-                else
-                    throw;
-            }
-        }
-    }
-}
-
-
 void LocalStore::registerValidPath(const ValidPathInfo & info)
 {
     registerValidPaths({{info.path, info}});
@@ -1209,8 +1119,7 @@ void LocalStore::registerValidPaths(const ValidPathInfos & infos)
         for (auto & [_, i] : infos)
             if (i.path.isDerivation()) {
                 // FIXME: inefficient; we already loaded the derivation in addValidPath().
-                checkDerivationOutputs(i.path,
-                    readInvalidDerivation(i.path));
+                readInvalidDerivation(i.path).checkInvariants(*this, i.path);
             }
 
         /* Do a topological sort of the paths.  This will throw an
@@ -1560,7 +1469,7 @@ void LocalStore::invalidatePathChecked(const StorePath & path)
 
 bool LocalStore::verifyStore(bool checkContents, RepairFlag repair)
 {
-    printInfo(format("reading the Nix store..."));
+    printInfo("reading the Nix store...");
 
     bool errors = false;
 
@@ -1719,6 +1628,11 @@ unsigned int LocalStore::getProtocol()
     return PROTOCOL_VERSION;
 }
 
+std::optional<TrustedFlag> LocalStore::isTrustedClient()
+{
+    return Trusted;
+}
+
 
 #if defined(FS_IOC_SETFLAGS) && defined(FS_IOC_GETFLAGS) && defined(FS_IMMUTABLE_FL)
 
@@ -1821,20 +1735,6 @@ void LocalStore::signPathInfo(ValidPathInfo & info)
     }
 }
 
-
-void LocalStore::createUser(const std::string & userName, uid_t userId)
-{
-    for (auto & dir : {
-        fmt("%s/profiles/per-user/%s", stateDir, userName),
-        fmt("%s/gcroots/per-user/%s", stateDir, userName)
-    }) {
-        createDirs(dir);
-        if (chmod(dir.c_str(), 0755) == -1)
-            throw SysError("changing permissions of directory '%s'", dir);
-        if (chown(dir.c_str(), userId, getgid()) == -1)
-            throw SysError("changing owner of directory '%s'", dir);
-    }
-}
 
 std::optional<std::pair<int64_t, Realisation>> LocalStore::queryRealisationCore_(
         LocalStore::State & state,
@@ -1964,5 +1864,6 @@ std::optional<std::string> LocalStore::getVersion()
     return nixVersion;
 }
 
+static RegisterStoreImplementation<LocalStore, LocalStoreConfig> regLocalStore;
 
 }  // namespace nix

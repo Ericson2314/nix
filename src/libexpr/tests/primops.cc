@@ -1,7 +1,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "libexprtests.hh"
+#include "tests/libexpr.hh"
 
 namespace nix {
     class CaptureLogger : public Logger
@@ -15,8 +15,8 @@ namespace nix {
                 return oss.str();
             }
 
-            void log(Verbosity lvl, const FormatOrString & fs) override {
-                oss << fs.s << std::endl;
+            void log(Verbosity lvl, std::string_view s) override {
+                oss << s << std::endl;
             }
 
             void logEI(const ErrorInfo & ei) override {
@@ -822,5 +822,11 @@ namespace nix {
         const std::vector<std::string_view> expected { "a", "x", "y", "z" };
         for (const auto [n, elem] : enumerate(v.listItems()))
             ASSERT_THAT(*elem, IsStringEq(expected[n]));
+    }
+
+    TEST_F(PrimOpTest, genericClosure_not_strict) {
+        // Operator should not be used when startSet is empty
+        auto v = eval("builtins.genericClosure { startSet = []; }");
+        ASSERT_THAT(v, IsListOfSize(0));
     }
 } /* namespace nix */

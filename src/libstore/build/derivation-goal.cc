@@ -39,7 +39,6 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <netinet/ip.h>
-#include <sys/personality.h>
 #include <sys/mman.h>
 #include <sched.h>
 #include <sys/param.h>
@@ -64,7 +63,7 @@
 namespace nix {
 
 DerivationGoal::DerivationGoal(const StorePath & drvPath,
-    const StringSet & wantedOutputs, Worker & worker, BuildMode buildMode)
+    const OutputsSpec & wantedOutputs, Worker & worker, BuildMode buildMode)
     : Goal(worker, DerivedPath::Built { .drvPath = drvPath, .outputs = wantedOutputs })
     , useDerivation(true)
     , drvPath(drvPath)
@@ -83,7 +82,7 @@ DerivationGoal::DerivationGoal(const StorePath & drvPath,
 
 
 DerivationGoal::DerivationGoal(const StorePath & drvPath, const BasicDerivation & drv,
-    const StringSet & wantedOutputs, Worker & worker, BuildMode buildMode)
+    const OutputsSpec & wantedOutputs, Worker & worker, BuildMode buildMode)
     : Goal(worker, DerivedPath::Built { .drvPath = drvPath, .outputs = wantedOutputs })
     , useDerivation(false)
     , drvPath(drvPath)
@@ -143,18 +142,12 @@ void DerivationGoal::work()
     (this->*state)();
 }
 
-void DerivationGoal::addWantedOutputs(const StringSet & outputs)
+void DerivationGoal::addWantedOutputs(const OutputsSpec & outputs)
 {
-    /* If we already want all outputs, there is nothing to do. */
-    if (wantedOutputs.empty()) return;
-
-    if (outputs.empty()) {
-        wantedOutputs.clear();
+    auto newWanted = wantedOutputs.union_(outputs);
+    if (!newWanted.isSubsetOf(wantedOutputs))
         needRestart = true;
-    } else
-        for (auto & i : outputs)
-            if (wantedOutputs.insert(i).second)
-                needRestart = true;
+    wantedOutputs = newWanted;
 }
 
 
@@ -206,10 +199,10 @@ void DerivationGoal::haveDerivation()
     parsedDrv = std::make_unique<ParsedDerivation>(drvPath, *drv);
 
     if (!drv->type().hasKnownOutputPaths())
-        settings.requireExperimentalFeature(Xp::CaDerivations);
+        experimentalFeatureSettings.require(Xp::CaDerivations);
 
     if (!drv->type().isPure()) {
-        settings.requireExperimentalFeature(Xp::ImpureDerivations);
+        experimentalFeatureSettings.require(Xp::ImpureDerivations);
 
         for (auto & [outputName, output] : drv->outputs) {
             auto randomPath = StorePath::random(outputPathName(drv->name, outputName));
@@ -343,7 +336,7 @@ void DerivationGoal::gaveUpOnSubstitution()
         for (auto & i : dynamic_cast<Derivation *>(drv.get())->inputDrvs) {
             /* Ensure that pure, non-fixed-output derivations don't
                depend on impure derivations. */
-            if (settings.isExperimentalFeatureEnabled(Xp::ImpureDerivations) && drv->type().isPure() && !drv->type().isFixed()) {
+            if (experimentalFeatureSettings.isEnabled(Xp::ImpureDerivations) && drv->type().isPure() && !drv->type().isFixed()) {
                 auto inputDrv = worker.evalStore.readDerivation(i.first);
                 if (!inputDrv.type().isPure())
                     throw Error("pure derivation '%s' depends on impure derivation '%s'",
@@ -391,7 +384,7 @@ void DerivationGoal::repairClosure()
     auto outputs = queryDerivationOutputMap();
     StorePathSet outputClosure;
     for (auto & i : outputs) {
-        if (!wantOutput(i.first, wantedOutputs)) continue;
+        if (!wantedOutputs.contains(i.first)) continue;
         worker.store.computeFSClosure(i.second, outputClosure);
     }
 
@@ -423,7 +416,7 @@ void DerivationGoal::repairClosure()
         if (drvPath2 == outputsToDrv.end())
             addWaitee(upcast_goal(worker.makePathSubstitutionGoal(i, Repair)));
         else
-            addWaitee(worker.makeDerivationGoal(drvPath2->second, StringSet(), bmRepair));
+            addWaitee(worker.makeDerivationGoal(drvPath2->second, OutputsSpec::All(), bmRepair));
     }
 
     if (waitees.empty()) {
@@ -484,7 +477,7 @@ void DerivationGoal::inputsRealised()
                     ca.fixed
                     /* Can optionally resolve if fixed, which is good
                        for avoiding unnecessary rebuilds. */
-                    ? settings.isExperimentalFeatureEnabled(Xp::CaDerivations)
+                    ? experimentalFeatureSettings.isEnabled(Xp::CaDerivations)
                     /* Must resolve if floating and there are any inputs
                        drvs. */
                     : true);
@@ -495,7 +488,7 @@ void DerivationGoal::inputsRealised()
         }, drvType.raw());
 
         if (resolveDrv && !fullDrv.inputDrvs.empty()) {
-            settings.requireExperimentalFeature(Xp::CaDerivations);
+            experimentalFeatureSettings.require(Xp::CaDerivations);
 
             /* We are be able to resolve this derivation based on the
                now-known results of dependencies. If so, we become a
@@ -545,7 +538,8 @@ void DerivationGoal::inputsRealised()
                    However, the impure derivations feature still relies on this
                    fragile way of doing things, because its builds do not have
                    a representation in the store, which is a usability problem
-                   in itself */
+                   in itself. When implementing this logic entirely with lookups
+                   make sure that they're cached. */
                 if (auto outPath = get(inputDrvOutputs, { depDrvPath, j })) {
                     worker.store.computeFSClosure(*outPath, inputPaths);
                 }
@@ -738,7 +732,7 @@ void replaceValidPath(const Path & storePath, const Path & tmpPath)
        tmpPath (the replacement), so we have to move it out of the
        way first.  We'd better not be interrupted here, because if
        we're repairing (say) Glibc, we end up with a broken system. */
-    Path oldPath = (format("%1%.old-%2%-%3%") % storePath % getpid() % random()).str();
+    Path oldPath = fmt("%1%.old-%2%-%3%", storePath, getpid(), random());
     if (pathExists(storePath))
         movePath(storePath, oldPath);
 
@@ -917,7 +911,11 @@ void DerivationGoal::buildDone()
                     msg += line;
                     msg += "\n";
                 }
-                msg += fmt("For full logs, run '" ANSI_BOLD "nix log %s" ANSI_NORMAL "'.",
+                auto nixLogCommand = experimentalFeatureSettings.isEnabled(Xp::NixCommand)
+                    ? "nix log"
+                    : "nix-store -l";
+                msg += fmt("For full logs, run '" ANSI_BOLD "%s %s" ANSI_NORMAL "'.",
+                    nixLogCommand,
                     worker.store.printStorePath(drvPath));
             }
 
@@ -991,10 +989,15 @@ void DerivationGoal::resolvedFinished()
 
         StorePathSet outputPaths;
 
-        // `wantedOutputs` might be empty, which means “all the outputs”
-        auto realWantedOutputs = wantedOutputs;
-        if (realWantedOutputs.empty())
-            realWantedOutputs = resolvedDrv.outputNames();
+        // `wantedOutputs` might merely indicate “all the outputs”
+        auto realWantedOutputs = std::visit(overloaded {
+            [&](const OutputsSpec::All &) {
+                return resolvedDrv.outputNames();
+            },
+            [&](const OutputsSpec::Names & names) {
+                return static_cast<std::set<std::string>>(names);
+            },
+        }, wantedOutputs.raw());
 
         for (auto & wantedOutput : realWantedOutputs) {
             auto initialOutput = get(initialOutputs, wantedOutput);
@@ -1322,7 +1325,14 @@ std::pair<bool, DrvOutputs> DerivationGoal::checkPathValidity()
     if (!drv->type().isPure()) return { false, {} };
 
     bool checkHash = buildMode == bmRepair;
-    auto wantedOutputsLeft = wantedOutputs;
+    auto wantedOutputsLeft = std::visit(overloaded {
+        [&](const OutputsSpec::All &) {
+            return StringSet {};
+        },
+        [&](const OutputsSpec::Names & names) {
+            return static_cast<StringSet>(names);
+        },
+    }, wantedOutputs.raw());
     DrvOutputs validOutputs;
 
     for (auto & i : queryPartialDerivationOutputMap()) {
@@ -1331,7 +1341,7 @@ std::pair<bool, DrvOutputs> DerivationGoal::checkPathValidity()
             // this is an invalid output, gets catched with (!wantedOutputsLeft.empty())
             continue;
         auto & info = *initialOutput;
-        info.wanted = wantOutput(i.first, wantedOutputs);
+        info.wanted = wantedOutputs.contains(i.first);
         if (info.wanted)
             wantedOutputsLeft.erase(i.first);
         if (i.second) {
@@ -1346,7 +1356,7 @@ std::pair<bool, DrvOutputs> DerivationGoal::checkPathValidity()
             };
         }
         auto drvOutput = DrvOutput{info.outputHash, i.first};
-        if (settings.isExperimentalFeatureEnabled(Xp::CaDerivations)) {
+        if (experimentalFeatureSettings.isEnabled(Xp::CaDerivations)) {
             if (auto real = worker.store.queryRealisation(drvOutput)) {
                 info.known = {
                     .path = real->outPath,
@@ -1369,7 +1379,7 @@ std::pair<bool, DrvOutputs> DerivationGoal::checkPathValidity()
             validOutputs.emplace(drvOutput, Realisation { drvOutput, info.known->path });
     }
 
-    // If we requested all the outputs via the empty set, we are always fine.
+    // If we requested all the outputs, we are always fine.
     // If we requested specific elements, the loop above removes all the valid
     // ones, so any that are left must be invalid.
     if (!wantedOutputsLeft.empty())

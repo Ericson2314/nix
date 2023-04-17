@@ -32,6 +32,14 @@ struct CmdUpgradeNix : MixDryRun, StoreCommand
         });
     }
 
+    /**
+     * This command is stable before the others
+     */
+    std::optional<ExperimentalFeature> experimentalFeature() override
+    {
+        return std::nullopt;
+    }
+
     std::string description() override
     {
         return "upgrade Nix to the stable version declared in Nixpkgs";
@@ -144,7 +152,7 @@ struct CmdUpgradeNix : MixDryRun, StoreCommand
         Bindings & bindings(*state->allocBindings(0));
         auto v2 = findAlongAttrPath(*state, settings.thisSystem, bindings, *v).first;
 
-        return store->parseStorePath(state->forceString(*v2));
+        return store->parseStorePath(state->forceString(*v2, noPos, "while evaluating the path tho latest nix version"));
     }
 };
 

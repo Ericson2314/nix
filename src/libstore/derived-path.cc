@@ -19,11 +19,11 @@ nlohmann::json DerivedPath::Built::toJSON(ref<Store> store) const {
     res["drvPath"] = store->printStorePath(drvPath);
     // Fallback for the input-addressed derivation case: We expect to always be
     // able to print the output paths, so let’s do it
-    const auto knownOutputs = store->queryPartialDerivationOutputMap(drvPath);
-    for (const auto & output : outputs) {
-        auto knownOutput = get(knownOutputs, output);
-        if (knownOutput && *knownOutput)
-            res["outputs"][output] = store->printStorePath(**knownOutput);
+    const auto outputMap = store->queryPartialDerivationOutputMap(drvPath);
+    for (const auto & [output, outputPathOpt] : outputMap) {
+        if (!outputs.contains(output)) continue;
+        if (outputPathOpt)
+            res["outputs"][output] = store->printStorePath(*outputPathOpt);
         else
             res["outputs"][output] = nullptr;
     }
@@ -62,15 +62,31 @@ std::string DerivedPath::Opaque::to_string(const Store & store) const
 std::string DerivedPath::Built::to_string(const Store & store) const
 {
     return store.printStorePath(drvPath)
-        + "!"
-        + (outputs.empty() ? std::string { "*" } : concatStringsSep(",", outputs));
+        + '^'
+        + outputs.to_string();
+}
+
+std::string DerivedPath::Built::to_string_legacy(const Store & store) const
+{
+    return store.printStorePath(drvPath)
+        + '!'
+        + outputs.to_string();
 }
 
 std::string DerivedPath::to_string(const Store & store) const
 {
-    return std::visit(
-        [&](const auto & req) { return req.to_string(store); },
-        this->raw());
+    return std::visit(overloaded {
+        [&](const DerivedPath::Built & req) { return req.to_string(store); },
+        [&](const DerivedPath::Opaque & req) { return req.to_string(store); },
+    }, this->raw());
+}
+
+std::string DerivedPath::to_string_legacy(const Store & store) const
+{
+    return std::visit(overloaded {
+        [&](const DerivedPath::Built & req) { return req.to_string_legacy(store); },
+        [&](const DerivedPath::Opaque & req) { return req.to_string(store); },
+    }, this->raw());
 }
 
 
@@ -81,23 +97,28 @@ DerivedPath::Opaque DerivedPath::Opaque::parse(const Store & store, std::string_
 
 DerivedPath::Built DerivedPath::Built::parse(const Store & store, std::string_view drvS, std::string_view outputsS)
 {
-    auto drvPath = store.parseStorePath(drvS);
-    std::set<std::string> outputs;
-    if (outputsS != "*") {
-        outputs = tokenizeString<std::set<std::string>>(outputsS, ",");
-        if (outputs.empty())
-            throw Error(
-                 "Explicit list of wanted outputs '%s' must not be empty. Consider using '*' as a wildcard meaning all outputs if no output in particular is wanted.", outputsS);
-	}
-    return {drvPath, outputs};
+    return {
+        .drvPath = store.parseStorePath(drvS),
+        .outputs = OutputsSpec::parse(outputsS),
+    };
+}
+
+static inline DerivedPath parseWith(const Store & store, std::string_view s, std::string_view separator)
+{
+    size_t n = s.find(separator);
+    return n == s.npos
+        ? (DerivedPath) DerivedPath::Opaque::parse(store, s)
+        : (DerivedPath) DerivedPath::Built::parse(store, s.substr(0, n), s.substr(n + 1));
 }
 
 DerivedPath DerivedPath::parse(const Store & store, std::string_view s)
 {
-    size_t n = s.find("!");
-    return n == s.npos
-        ? (DerivedPath) DerivedPath::Opaque::parse(store, s)
-        : (DerivedPath) DerivedPath::Built::parse(store, s.substr(0, n), s.substr(n + 1));
+	return parseWith(store, s, "^");
+}
+
+DerivedPath DerivedPath::parseLegacy(const Store & store, std::string_view s)
+{
+	return parseWith(store, s, "!");
 }
 
 RealisedPath::Set BuiltPath::toRealisedPaths(Store & store) const
@@ -110,7 +131,7 @@ RealisedPath::Set BuiltPath::toRealisedPaths(Store & store) const
                 auto drvHashes =
                     staticOutputHashes(store, store.readDerivation(p.drvPath));
                 for (auto& [outputName, outputPath] : p.outputs) {
-                    if (settings.isExperimentalFeatureEnabled(
+                    if (experimentalFeatureSettings.isEnabled(
                                 Xp::CaDerivations)) {
                         auto drvOutput = get(drvHashes, outputName);
                         if (!drvOutput)

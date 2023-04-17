@@ -1,9 +1,9 @@
 #pragma once
+///@file
 
 #include "types.hh"
 #include "config.hh"
 #include "util.hh"
-#include "experimental-features.hh"
 
 #include <map>
 #include <limits>
@@ -64,40 +64,63 @@ class Settings : public Config {
 
     bool isWSL1();
 
+    Path getDefaultSSLCertFile();
+
 public:
 
     Settings();
 
     Path nixPrefix;
 
-    /* The directory where we store sources and derived files. */
+    /**
+     * The directory where we store sources and derived files.
+     */
     Path nixStore;
 
     Path nixDataDir; /* !!! fix */
 
-    /* The directory where we log various operations. */
+    /**
+     * The directory where we log various operations.
+     */
     Path nixLogDir;
 
-    /* The directory where state is stored. */
+    /**
+     * The directory where state is stored.
+     */
     Path nixStateDir;
 
-    /* The directory where system configuration files are stored. */
+    /**
+     * The directory where system configuration files are stored.
+     */
     Path nixConfDir;
 
-    /* A list of user configuration files to load. */
+    /**
+     * A list of user configuration files to load.
+     */
     std::vector<Path> nixUserConfFiles;
 
-    /* The directory where the main programs are stored. */
+    /**
+     * The directory where the main programs are stored.
+     */
     Path nixBinDir;
 
-    /* The directory where the man pages are stored. */
+    /**
+     * The directory where the man pages are stored.
+     */
     Path nixManDir;
 
-    /* File name of the socket the daemon listens to.  */
+    /**
+     * File name of the socket the daemon listens to.
+     */
     Path nixDaemonSocketFile;
 
     Setting<std::string> storeUri{this, getEnv("NIX_REMOTE").value_or("auto"), "store",
-        "The default Nix store to use."};
+        R"(
+          The [URL of the Nix store](@docroot@/command-ref/new-cli/nix3-help-stores.md#store-url-format)
+          to use for most operations.
+          See [`nix help-stores`](@docroot@/command-ref/new-cli/nix3-help-stores.md)
+          for supported store types and settings.
+        )"};
 
     Setting<bool> keepFailed{this, false, "keep-failed",
         "Whether to keep temporary directories of failed builds."};
@@ -114,7 +137,9 @@ public:
         )",
         {"build-fallback"}};
 
-    /* Whether to show build log output in real time. */
+    /**
+     * Whether to show build log output in real time.
+     */
     bool verboseBuild = true;
 
     Setting<size_t> logLines{this, 10, "log-lines",
@@ -150,8 +175,10 @@ public:
         )",
         {"build-cores"}, false};
 
-    /* Read-only mode.  Don't copy stuff to the store, don't change
-       the database. */
+    /**
+     * Read-only mode.  Don't copy stuff to the store, don't change
+     * the database.
+     */
     bool readOnlyMode = false;
 
     Setting<std::string> thisSystem{
@@ -201,7 +228,16 @@ public:
         {"build-timeout"}};
 
     PathSetting buildHook{this, true, "", "build-hook",
-        "The path of the helper program that executes builds to remote machines."};
+        R"(
+          The path to the helper program that executes remote builds.
+
+          Nix communicates with the build hook over `stdio` using a custom protocol to request builds that cannot be performed directly by the Nix daemon.
+          The default value is the internal Nix binary that implements remote building.
+
+          > **Important**
+          >
+          > Change this setting only if you really know what you’re doing.
+        )"};
 
     Setting<std::string> builders{
         this, "@" + nixConfDir + "/machines", "builders",
@@ -279,8 +315,8 @@ public:
           If the build users group is empty, builds will be performed under
           the uid of the Nix process (that is, the uid of the caller if
           `NIX_REMOTE` is empty, the uid under which the Nix daemon runs if
-          `NIX_REMOTE` is `daemon`). Obviously, this should not be used in
-          multi-user settings with untrusted users.
+          `NIX_REMOTE` is `daemon`). Obviously, this should not be used
+          with a nix daemon accessible to untrusted clients.
 
           Defaults to `nixbld` when running as root, *empty* otherwise.
         )",
@@ -292,16 +328,6 @@ public:
           users in `build-users-group`.
 
           UIDs are allocated starting at 872415232 (0x34000000) on Linux and 56930 on macOS.
-
-          > **Warning**
-          > This is an experimental feature.
-
-          To enable it, add the following to [`nix.conf`](#):
-
-          ```
-          extra-experimental-features = auto-allocate-uids
-          auto-allocate-uids = true
-          ```
         )"};
 
     Setting<uint32_t> startId{this,
@@ -329,18 +355,8 @@ public:
           Whether to execute builds inside cgroups.
           This is only supported on Linux.
 
-          Cgroups are required and enabled automatically for derivations 
+          Cgroups are required and enabled automatically for derivations
           that require the `uid-range` system feature.
-
-          > **Warning**
-          > This is an experimental feature.
-
-          To enable it, add the following to [`nix.conf`](#):
-
-          ```
-          extra-experimental-features = cgroups
-          use-cgroups = true
-          ```
         )"};
     #endif
 
@@ -442,9 +458,6 @@ public:
         )",
         {"env-keep-derivations"}};
 
-    /* Whether to lock the Nix client and worker to the same CPU. */
-    bool lockCPU;
-
     Setting<SandboxMode> sandboxMode{
         this,
         #if __linux__
@@ -490,6 +503,9 @@ public:
           followed by `?`, then it is not an error if *source* does not exist;
           for example, `/dev/nvidiactl?` specifies that `/dev/nvidiactl` will
           only be mounted in the sandbox if it exists in the host filesystem.
+
+          If the source is in the Nix store, then its closure will be added to
+          the sandbox as well.
 
           Depending on how Nix was built, the default value for this option
           may be empty or provide `/bin/sh` as a bind-mount of `bash`.
@@ -567,11 +583,15 @@ public:
         {"cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="},
         "trusted-public-keys",
         R"(
-          A whitespace-separated list of public keys. When paths are copied
-          from another Nix store (such as a binary cache), they must be
-          signed with one of these keys. For example:
-          `cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
-          hydra.nixos.org-1:CNHJZBh9K4tP3EKF6FkkgeVYsS3ohTl+oS0Qa8bezVs=`.
+          A whitespace-separated list of public keys.
+
+          At least one of the following condition must be met
+          for Nix to accept copying a store object from another
+          Nix store (such as a substituter):
+
+          - the store object has been signed using a key in the trusted keys list
+          - the [`require-sigs`](#conf-require-sigs) option has been set to `false`
+          - the store object is [output-addressed](@docroot@/glossary.md#gloss-output-addressed-store-object)
         )",
         {"binary-cache-public-keys"}};
 
@@ -662,49 +682,34 @@ public:
         Strings{"https://cache.nixos.org/"},
         "substituters",
         R"(
-          A list of URLs of substituters, separated by whitespace. Substituters
-          are tried based on their Priority value, which each substituter can set
+          A list of [URLs of Nix stores](@docroot@/command-ref/new-cli/nix3-help-stores.md#store-url-format)
+          to be used as substituters, separated by whitespace.
+          Substituters are tried based on their Priority value, which each substituter can set
           independently. Lower value means higher priority.
           The default is `https://cache.nixos.org`, with a Priority of 40.
 
-          Nix will copy a store path from a remote store only if one
-          of the following is true:
+          At least one of the following conditions must be met for Nix to use
+          a substituter:
 
-          - the store object is signed by one of the [`trusted-public-keys`](#conf-trusted-public-keys)
           - the substituter is in the [`trusted-substituters`](#conf-trusted-substituters) list
-          - the [`require-sigs`](#conf-require-sigs) option has been set to `false`
-          - the store object is [output-addressed](glossary.md#gloss-output-addressed-store-object)
+          - the user calling Nix is in the [`trusted-users`](#conf-trusted-users) list
+
+          In addition, each store path should be trusted as described
+          in [`trusted-public-keys`](#conf-trusted-public-keys)
         )",
         {"binary-caches"}};
 
     Setting<StringSet> trustedSubstituters{
         this, {}, "trusted-substituters",
         R"(
-          A list of URLs of substituters, separated by whitespace. These are
+          A list of [URLs of Nix stores](@docroot@/command-ref/new-cli/nix3-help-stores.md#store-url-format),
+          separated by whitespace. These are
           not used by default, but can be enabled by users of the Nix daemon
           by specifying `--option substituters urls` on the command
           line. Unprivileged users are only allowed to pass a subset of the
           URLs listed in `substituters` and `trusted-substituters`.
         )",
         {"trusted-binary-caches"}};
-
-    Setting<Strings> trustedUsers{
-        this, {"root"}, "trusted-users",
-        R"(
-          A list of names of users (separated by whitespace) that have
-          additional rights when connecting to the Nix daemon, such as the
-          ability to specify additional binary caches, or to import unsigned
-          NARs. You can also specify groups by prefixing them with `@`; for
-          instance, `@wheel` means all users in the `wheel` group. The default
-          is `root`.
-
-          > **Warning**
-          >
-          > Adding a user to `trusted-users` is essentially equivalent to
-          > giving that user root access to the system. For example, the user
-          > can set `sandbox-paths` and thereby obtain read access to
-          > directories that are otherwise inacessible to them.
-        )"};
 
     Setting<unsigned int> ttlNegativeNarInfoCache{
         this, 3600, "narinfo-cache-negative-ttl",
@@ -726,18 +731,6 @@ public:
           collection, in which case having a more frequent cache invalidation
           would prevent trying to pull the path again and failing with a hash
           mismatch if the build isn't reproducible.
-        )"};
-
-    /* ?Who we trust to use the daemon in safe ways */
-    Setting<Strings> allowedUsers{
-        this, {"*"}, "allowed-users",
-        R"(
-          A list of names of users (separated by whitespace) that are allowed
-          to connect to the Nix daemon. As with the `trusted-users` option,
-          you can specify groups by prefixing them with `@`. Also, you can
-          allow all users by specifying `*`. The default is `*`.
-
-          Note that trusted users are always allowed to connect.
         )"};
 
     Setting<bool> printMissing{this, true, "print-missing",
@@ -839,8 +832,22 @@ public:
           > `.netrc`.
         )"};
 
-    /* Path to the SSL CA file used */
-    Path caFile;
+    Setting<Path> caFile{
+        this, getDefaultSSLCertFile(), "ssl-cert-file",
+        R"(
+          The path of a file containing CA certificates used to
+          authenticate `https://` downloads. Nix by default will use
+          the first of the following files that exists:
+
+          1. `/etc/ssl/certs/ca-certificates.crt`
+          2. `/nix/var/nix/profiles/default/etc/ssl/certs/ca-bundle.crt`
+
+          The path can be overridden by the following environment
+          variables, in order of precedence:
+
+          1. `NIX_SSL_CERT_FILE`
+          2. `SSL_CERT_FILE`
+        )"};
 
 #if __linux__
     Setting<bool> filterSyscalls{
@@ -945,13 +952,6 @@ public:
           are loaded as plugins (non-recursively).
         )"};
 
-    Setting<std::set<ExperimentalFeature>> experimentalFeatures{this, {}, "experimental-features",
-        "Experimental Nix features to enable."};
-
-    bool isExperimentalFeatureEnabled(const ExperimentalFeature &);
-
-    void requireExperimentalFeature(const ExperimentalFeature &);
-
     Setting<size_t> narBufferSize{this, 32 * 1024 * 1024, "nar-buffer-size",
         "Maximum size of NARs before spilling them to disk."};
 
@@ -967,14 +967,37 @@ public:
           resolves to a different location from that of the build machine. You
           can enable this setting if you are sure you're not going to do that.
         )"};
+
+    Setting<bool> useXDGBaseDirectories{
+        this, false, "use-xdg-base-directories",
+        R"(
+          If set to `true`, Nix will conform to the [XDG Base Directory Specification] for files in `$HOME`.
+          The environment variables used to implement this are documented in the [Environment Variables section](@docroot@/installation/env-variables.md).
+
+          [XDG Base Directory Specification]: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+
+          > **Warning**
+          > This changes the location of some well-known symlinks that Nix creates, which might break tools that rely on the old, non-XDG-conformant locations.
+
+          In particular, the following locations change:
+
+          | Old               | New                            |
+          |-------------------|--------------------------------|
+          | `~/.nix-profile`  | `$XDG_STATE_HOME/nix/profile`  |
+          | `~/.nix-defexpr`  | `$XDG_STATE_HOME/nix/defexpr`  |
+          | `~/.nix-channels` | `$XDG_STATE_HOME/nix/channels` |
+        )"
+    };
 };
 
 
 // FIXME: don't use a global variable.
 extern Settings settings;
 
-/* This should be called after settings are initialized, but before
-   anything else */
+/**
+ * This should be called after settings are initialized, but before
+ * anything else
+ */
 void initPlugins();
 
 void loadConfFile();
@@ -983,5 +1006,17 @@ void loadConfFile();
 std::vector<Path> getUserConfigFiles();
 
 extern const std::string nixVersion;
+
+/**
+ * NB: This is not sufficient. You need to call initNix()
+ */
+void initLibStore();
+
+/**
+ * It's important to initialize before doing _anything_, which is why we
+ * call upon the programmer to handle this correctly. However, we only add
+ * this in a key locations, so as not to litter the code.
+ */
+void assertLibStoreInitialized();
 
 }

@@ -41,18 +41,36 @@ SQLiteError::SQLiteError(const char *path, const char *errMsg, int errNo, int ex
         throw SQLiteError(path, errMsg, err, exterr, offset, std::move(hf));
 }
 
+static void traceSQL(void * x, const char * sql)
+{
+    // wacky delimiters:
+    //   so that we're quite unambiguous without escaping anything
+    // notice instead of trace:
+    //   so that this can be enabled without getting the firehose in our face.
+    notice("SQL<[%1%]>", sql);
+};
+
 SQLite::SQLite(const Path & path, bool create)
 {
     // useSQLiteWAL also indicates what virtual file system we need.  Using
     // `unix-dotfile` is needed on NFS file systems and on Windows' Subsystem
     // for Linux (WSL) where useSQLiteWAL should be false by default.
     const char *vfs = settings.useSQLiteWAL ? 0 : "unix-dotfile";
-    if (sqlite3_open_v2(path.c_str(), &db,
-            SQLITE_OPEN_READWRITE | (create ? SQLITE_OPEN_CREATE : 0), vfs) != SQLITE_OK)
-        throw Error("cannot open SQLite database '%s'", path);
+    int flags = SQLITE_OPEN_READWRITE;
+    if (create) flags |= SQLITE_OPEN_CREATE;
+    int ret = sqlite3_open_v2(path.c_str(), &db, flags, vfs);
+    if (ret != SQLITE_OK) {
+        const char * err = sqlite3_errstr(ret);
+        throw Error("cannot open SQLite database '%s': %s", path, err);
+    }
 
     if (sqlite3_busy_timeout(db, 60 * 60 * 1000) != SQLITE_OK)
         SQLiteError::throw_(db, "setting timeout");
+
+    if (getEnv("NIX_DEBUG_SQLITE_TRACES") == "1") {
+        // To debug sqlite statements; trace all of them
+        sqlite3_trace(db, &traceSQL, nullptr);
+    }
 
     exec("pragma foreign_keys = 1");
 }
@@ -221,14 +239,11 @@ SQLiteTxn::~SQLiteTxn()
     }
 }
 
-void handleSQLiteBusy(const SQLiteBusy & e)
+void handleSQLiteBusy(const SQLiteBusy & e, time_t & nextWarning)
 {
-    static std::atomic<time_t> lastWarned{0};
-
     time_t now = time(0);
-
-    if (now > lastWarned + 10) {
-        lastWarned = now;
+    if (now > nextWarning) {
+        nextWarning = now + 10;
         logWarning({
             .msg = hintfmt(e.what())
         });

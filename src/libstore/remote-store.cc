@@ -42,6 +42,40 @@ void write(const Store & store, Sink & out, const StorePath & storePath)
 }
 
 
+std::optional<TrustedFlag> read(const Store & store, Source & from, Phantom<std::optional<TrustedFlag>> _)
+{
+    auto temp = readNum<uint8_t>(from);
+    switch (temp) {
+        case 0:
+            return std::nullopt;
+        case 1:
+            return { Trusted };
+        case 2:
+            return { NotTrusted };
+        default:
+            throw Error("Invalid trusted status from remote");
+    }
+}
+
+void write(const Store & store, Sink & out, const std::optional<TrustedFlag> & optTrusted)
+{
+    if (!optTrusted)
+        out << (uint8_t)0;
+    else {
+        switch (*optTrusted) {
+        case Trusted:
+            out << (uint8_t)1;
+            break;
+        case NotTrusted:
+            out << (uint8_t)2;
+            break;
+        default:
+            assert(false);
+        };
+    }
+}
+
+
 ContentAddress read(const Store & store, Source & from, Phantom<ContentAddress> _)
 {
     return parseContentAddress(readString(from));
@@ -56,12 +90,12 @@ void write(const Store & store, Sink & out, const ContentAddress & ca)
 DerivedPath read(const Store & store, Source & from, Phantom<DerivedPath> _)
 {
     auto s = readString(from);
-    return DerivedPath::parse(store, s);
+    return DerivedPath::parseLegacy(store, s);
 }
 
 void write(const Store & store, Sink & out, const DerivedPath & req)
 {
-    out << req.to_string(store);
+    out << req.to_string_legacy(store);
 }
 
 
@@ -226,6 +260,13 @@ void RemoteStore::initConnection(Connection & conn)
             conn.daemonNixVersion = readString(conn.from);
         }
 
+        if (PROTOCOL_MINOR(conn.daemonVersion) >= 35) {
+            conn.remoteTrustsUs = worker_proto::read(*this, conn.from, Phantom<std::optional<TrustedFlag>> {});
+        } else {
+            // We don't know the answer; protocol to old.
+            conn.remoteTrustsUs = std::nullopt;
+        }
+
         auto ex = conn.processStderr();
         if (ex) std::rethrow_exception(ex);
     }
@@ -265,7 +306,8 @@ void RemoteStore::setOptions(Connection & conn)
         overrides.erase(settings.buildCores.name);
         overrides.erase(settings.useSubstitutes.name);
         overrides.erase(loggerSettings.showTrace.name);
-        overrides.erase(settings.experimentalFeatures.name);
+        overrides.erase(experimentalFeatureSettings.experimentalFeatures.name);
+        overrides.erase(settings.pluginFiles.name);
         conn.to << overrides.size();
         for (auto & i : overrides)
             conn.to << i.first << i.second.value;
@@ -867,34 +909,26 @@ std::vector<BuildResult> RemoteStore::buildPathsWithResults(
                         OutputPathMap outputs;
                         auto drv = evalStore->readDerivation(bfd.drvPath);
                         const auto outputHashes = staticOutputHashes(*evalStore, drv); // FIXME: expensive
-                        const auto drvOutputs = drv.outputsAndOptPaths(*this);
-                        for (auto & output : bfd.outputs) {
+                        auto built = resolveDerivedPath(*this, bfd, &*evalStore);
+                        for (auto & [output, outputPath] : built) {
                             auto outputHash = get(outputHashes, output);
                             if (!outputHash)
                                 throw Error(
                                     "the derivation '%s' doesn't have an output named '%s'",
                                     printStorePath(bfd.drvPath), output);
                             auto outputId = DrvOutput{ *outputHash, output };
-                            if (settings.isExperimentalFeatureEnabled(Xp::CaDerivations)) {
+                            if (experimentalFeatureSettings.isEnabled(Xp::CaDerivations)) {
                                 auto realisation =
                                     queryRealisation(outputId);
                                 if (!realisation)
-                                    throw Error(
-                                        "cannot operate on an output of unbuilt "
-                                        "content-addressed derivation '%s'",
-                                        outputId.to_string());
+                                    throw MissingRealisation(outputId);
                                 res.builtOutputs.emplace(realisation->id, *realisation);
                             } else {
-                                // If ca-derivations isn't enabled, assume that
-                                // the output path is statically known.
-                                const auto drvOutput = get(drvOutputs, output);
-                                assert(drvOutput);
-                                assert(drvOutput->second);
                                 res.builtOutputs.emplace(
                                     outputId,
                                     Realisation {
                                         .id = outputId,
-                                        .outPath = *drvOutput->second,
+                                        .outPath = outputPath,
                                     });
                             }
                         }
@@ -918,7 +952,12 @@ BuildResult RemoteStore::buildDerivation(const StorePath & drvPath, const BasicD
     writeDerivation(conn->to, *this, drv);
     conn->to << buildMode;
     conn.processStderr();
-    BuildResult res { .path = DerivedPath::Built { .drvPath = drvPath } };
+    BuildResult res {
+        .path = DerivedPath::Built {
+            .drvPath = drvPath,
+            .outputs = OutputsSpec::All { },
+        },
+    };
     res.status = (BuildResult::Status) readInt(conn->from);
     conn->from >> res.errorMsg;
     if (PROTOCOL_MINOR(conn->daemonVersion) >= 29) {
@@ -1084,6 +1123,11 @@ unsigned int RemoteStore::getProtocol()
     return conn->daemonVersion;
 }
 
+std::optional<TrustedFlag> RemoteStore::isTrustedClient()
+{
+    auto conn(getConnection());
+    return conn->remoteTrustsUs;
+}
 
 void RemoteStore::flushBadConnections()
 {

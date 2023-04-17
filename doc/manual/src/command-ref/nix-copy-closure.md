@@ -47,7 +47,9 @@ authentication, you can avoid typing the passphrase with `ssh-agent`.
     Enable compression of the SSH connection.
 
   - `--include-outputs`\
-    Also copy the outputs of store derivations included in the closure.
+    Also copy the outputs of [store derivation]s included in the closure.
+
+    [store derivation]: ../glossary.md#gloss-store-derivation
 
   - `--use-substitutes` / `-s`\
     Attempt to download missing paths on the target machine using Nix’s
@@ -61,11 +63,15 @@ authentication, you can avoid typing the passphrase with `ssh-agent`.
   - `-v`\
     Show verbose output.
 
+{{#include ./opt-common.md}}
+
 # Environment variables
 
   - `NIX_SSHOPTS`\
     Additional options to be passed to `ssh` on the command
     line.
+
+{{#include ./env-common.md}}
 
 # Examples
 

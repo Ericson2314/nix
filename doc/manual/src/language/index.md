@@ -91,7 +91,7 @@ This is an incomplete overview of language features, by example.
  <tr>
   <td>
 
-   `"hello ${ { a = "world" }.a }"`
+   `"hello ${ { a = "world"; }.a }"`
 
    `"1 2 ${toString 3}"`
 
@@ -191,12 +191,12 @@ This is an incomplete overview of language features, by example.
  <tr>
   <td>
 
-   <nixpkgs>
+   `<nixpkgs>`
 
   </td>
   <td>
 
-   Search path. Value determined by [`$NIX_PATH` environment variable](../command-ref/env-common.md#env-NIX_PATH).
+   Search path for Nix files. Value determined by [`$NIX_PATH` environment variable](../command-ref/env-common.md#env-NIX_PATH).
 
   </td>
  </tr>

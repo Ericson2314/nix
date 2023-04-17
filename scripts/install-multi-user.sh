@@ -136,7 +136,7 @@ EOF
     cat <<EOF
 $step. Delete the files Nix added to your system:
 
-  sudo rm -rf /etc/nix $NIX_ROOT $ROOT_HOME/.nix-profile $ROOT_HOME/.nix-defexpr $ROOT_HOME/.nix-channels $HOME/.nix-profile $HOME/.nix-defexpr $HOME/.nix-channels
+  sudo rm -rf "/etc/nix" "$NIX_ROOT" "$ROOT_HOME/.nix-profile" "$ROOT_HOME/.nix-defexpr" "$ROOT_HOME/.nix-channels" "$ROOT_HOME/.local/state/nix" "$ROOT_HOME/.cache/nix" "$HOME/.nix-profile" "$HOME/.nix-defexpr" "$HOME/.nix-channels" "$HOME/.local/state/nix" "$HOME/.cache/nix"
 
 and that is it.
 
@@ -575,7 +575,7 @@ EOF
     # to extract _just_ the user's note, instead it is prefixed with
     # some plist junk. This was causing the user note to always be set,
     # even if there was no reason for it.
-    if ! poly_user_note_get "$username" | grep -q "Nix build user $coreid"; then
+    if poly_user_note_get "$username" | grep -q "Nix build user $coreid"; then
         row "              Note" "Nix build user $coreid"
     else
         poly_user_note_set "$username" "Nix build user $coreid"

@@ -219,9 +219,9 @@ static void main_nix_build(int argc, char * * argv)
                 // read the shebang to understand which packages to read from. Since
                 // this is handled via nix-shell -p, we wrap our ruby script execution
                 // in ruby -e 'load' which ignores the shebangs.
-                envCommand = (format("exec %1% %2% -e 'load(ARGV.shift)' -- %3% %4%") % execArgs % interpreter % shellEscape(script) % joined.str()).str();
+                envCommand = fmt("exec %1% %2% -e 'load(ARGV.shift)' -- %3% %4%", execArgs, interpreter, shellEscape(script), joined.str());
             } else {
-                envCommand = (format("exec %1% %2% %3% %4%") % execArgs % interpreter % shellEscape(script) % joined.str()).str();
+                envCommand = fmt("exec %1% %2% %3% %4%", execArgs, interpreter, shellEscape(script), joined.str());
             }
         }
 
@@ -397,7 +397,7 @@ static void main_nix_build(int argc, char * * argv)
                 auto bashDrv = drv->requireDrvPath();
                 pathsToBuild.push_back(DerivedPath::Built {
                     .drvPath = bashDrv,
-                    .outputs = {"out"},
+                    .outputs = OutputsSpec::Names {"out"},
                 });
                 pathsToCopy.insert(bashDrv);
                 shellDrv = bashDrv;
@@ -421,7 +421,7 @@ static void main_nix_build(int argc, char * * argv)
             {
                 pathsToBuild.push_back(DerivedPath::Built {
                     .drvPath = inputDrv,
-                    .outputs = inputOutputs
+                    .outputs = OutputsSpec::Names { inputOutputs },
                 });
                 pathsToCopy.insert(inputDrv);
             }
@@ -440,7 +440,7 @@ static void main_nix_build(int argc, char * * argv)
             shell = store->printStorePath(shellDrvOutputs.at("out").value()) + "/bin/bash";
         }
 
-        if (settings.isExperimentalFeatureEnabled(Xp::CaDerivations)) {
+        if (experimentalFeatureSettings.isEnabled(Xp::CaDerivations)) {
             auto resolvedDrv = drv.tryResolve(*store);
             assert(resolvedDrv && "Successfully resolved the derivation");
             drv = *resolvedDrv;
@@ -536,7 +536,9 @@ static void main_nix_build(int argc, char * * argv)
                 "SHELL=%5%; "
                 "BASH=%5%; "
                 "set +e; "
-                R"s([ -n "$PS1" -a -z "$NIX_SHELL_PRESERVE_PROMPT" ] && PS1='\n\[\033[1;32m\][nix-shell:\w]\$\[\033[0m\] '; )s"
+                R"s([ -n "$PS1" -a -z "$NIX_SHELL_PRESERVE_PROMPT" ] && )s" +
+                (getuid() == 0 ? R"s(PS1='\n\[\033[1;31m\][nix-shell:\w]\$\[\033[0m\] '; )s"
+                               : R"s(PS1='\n\[\033[1;32m\][nix-shell:\w]\$\[\033[0m\] '; )s") +
                 "if [ \"$(type -t runHook)\" = function ]; then runHook shellHook; fi; "
                 "unset NIX_ENFORCE_PURITY; "
                 "shopt -u nullglob; "
@@ -591,7 +593,7 @@ static void main_nix_build(int argc, char * * argv)
             if (outputName == "")
                 throw Error("derivation '%s' lacks an 'outputName' attribute", store->printStorePath(drvPath));
 
-            pathsToBuild.push_back(DerivedPath::Built{drvPath, {outputName}});
+            pathsToBuild.push_back(DerivedPath::Built{drvPath, OutputsSpec::Names{outputName}});
             pathsToBuildOrdered.push_back({drvPath, {outputName}});
             drvsToCopy.insert(drvPath);
 

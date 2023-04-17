@@ -36,6 +36,7 @@
 #ifdef __linux__
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/mman.h>
 
 #include <cmath>
 #endif
@@ -46,6 +47,9 @@ extern char * * environ __attribute__((weak));
 
 namespace nix {
 
+void initLibUtil() {
+}
+
 std::optional<std::string> getEnv(const std::string & key)
 {
     char * value = getenv(key.c_str());
@@ -53,6 +57,11 @@ std::optional<std::string> getEnv(const std::string & key)
     return std::string(value);
 }
 
+std::optional<std::string> getEnvNonEmpty(const std::string & key) {
+    auto value = getEnv(key);
+    if (value == "") return {};
+    return value;
+}
 
 std::map<std::string, std::string> getEnv()
 {
@@ -522,7 +531,7 @@ void deletePath(const Path & path)
 
 void deletePath(const Path & path, uint64_t & bytesFreed)
 {
-    //Activity act(*logger, lvlDebug, format("recursively deleting path '%1%'") % path);
+    //Activity act(*logger, lvlDebug, "recursively deleting path '%1%'", path);
     bytesFreed = 0;
     _deletePath(path, bytesFreed);
 }
@@ -537,6 +546,16 @@ std::string getUserName()
     return name;
 }
 
+Path getHomeOf(uid_t userId)
+{
+    std::vector<char> buf(16384);
+    struct passwd pwbuf;
+    struct passwd * pw;
+    if (getpwuid_r(userId, &pwbuf, buf.data(), buf.size(), &pw) != 0
+        || !pw || !pw->pw_dir || !pw->pw_dir[0])
+        throw Error("cannot determine user's home directory");
+    return pw->pw_dir;
+}
 
 Path getHome()
 {
@@ -558,13 +577,7 @@ Path getHome()
             }
         }
         if (!homeDir) {
-            std::vector<char> buf(16384);
-            struct passwd pwbuf;
-            struct passwd * pw;
-            if (getpwuid_r(geteuid(), &pwbuf, buf.data(), buf.size(), &pw) != 0
-                || !pw || !pw->pw_dir || !pw->pw_dir[0])
-                throw Error("cannot determine user's home directory");
-            homeDir = pw->pw_dir;
+            homeDir = getHomeOf(geteuid());
             if (unownedUserHomeDir.has_value() && unownedUserHomeDir != homeDir) {
                 warn("$HOME ('%s') is not owned by you, falling back to the one defined in the 'passwd' file ('%s')", *unownedUserHomeDir, *homeDir);
             }
@@ -602,6 +615,19 @@ Path getDataDir()
 {
     auto dataDir = getEnv("XDG_DATA_HOME");
     return dataDir ? *dataDir : getHome() + "/.local/share";
+}
+
+Path getStateDir()
+{
+    auto stateDir = getEnv("XDG_STATE_HOME");
+    return stateDir ? *stateDir : getHome() + "/.local/state";
+}
+
+Path createNixStateDir()
+{
+    Path dir = getStateDir() + "/nix";
+    createDirs(dir);
+    return dir;
 }
 
 
@@ -1047,9 +1073,19 @@ static pid_t doFork(bool allowVfork, std::function<void()> fun)
 }
 
 
+#if __linux__
+static int childEntry(void * arg)
+{
+    auto main = (std::function<void()> *) arg;
+    (*main)();
+    return 1;
+}
+#endif
+
+
 pid_t startProcess(std::function<void()> fun, const ProcessOptions & options)
 {
-    auto wrapper = [&]() {
+    std::function<void()> wrapper = [&]() {
         if (!options.allowVfork)
             logger = makeSimpleLogger();
         try {
@@ -1069,7 +1105,27 @@ pid_t startProcess(std::function<void()> fun, const ProcessOptions & options)
             _exit(1);
     };
 
-    pid_t pid = doFork(options.allowVfork, wrapper);
+    pid_t pid = -1;
+
+    if (options.cloneFlags) {
+        #ifdef __linux__
+        // Not supported, since then we don't know when to free the stack.
+        assert(!(options.cloneFlags & CLONE_VM));
+
+        size_t stackSize = 1 * 1024 * 1024;
+        auto stack = (char *) mmap(0, stackSize,
+            PROT_WRITE | PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+        if (stack == MAP_FAILED) throw SysError("allocating stack");
+
+        Finally freeStack([&]() { munmap(stack, stackSize); });
+
+        pid = clone(childEntry, stack + stackSize, options.cloneFlags | SIGCHLD, &wrapper);
+        #else
+        throw Error("clone flags are only supported on Linux");
+        #endif
+    } else
+        pid = doFork(options.allowVfork, wrapper);
+
     if (pid == -1) throw SysError("unable to fork");
 
     return pid;
@@ -1348,14 +1404,14 @@ std::string statusToString(int status)
 {
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
         if (WIFEXITED(status))
-            return (format("failed with exit code %1%") % WEXITSTATUS(status)).str();
+            return fmt("failed with exit code %1%", WEXITSTATUS(status));
         else if (WIFSIGNALED(status)) {
             int sig = WTERMSIG(status);
 #if HAVE_STRSIGNAL
             const char * description = strsignal(sig);
-            return (format("failed due to signal %1% (%2%)") % sig % description).str();
+            return fmt("failed due to signal %1% (%2%)", sig, description);
 #else
-            return (format("failed due to signal %1%") % sig).str();
+            return fmt("failed due to signal %1%", sig);
 #endif
         }
         else
@@ -1424,7 +1480,7 @@ bool shouldANSI()
         && !getEnv("NO_COLOR").has_value();
 }
 
-std::string filterANSIEscapes(const std::string & s, bool filterAll, unsigned int width)
+std::string filterANSIEscapes(std::string_view s, bool filterAll, unsigned int width)
 {
     std::string t, e;
     size_t w = 0;
@@ -1691,13 +1747,39 @@ void triggerInterrupt()
 }
 
 static sigset_t savedSignalMask;
+static bool savedSignalMaskIsSet = false;
+
+void setChildSignalMask(sigset_t * sigs)
+{
+    assert(sigs); // C style function, but think of sigs as a reference
+
+#if _POSIX_C_SOURCE >= 1 || _XOPEN_SOURCE || _POSIX_SOURCE
+    sigemptyset(&savedSignalMask);
+    // There's no "assign" or "copy" function, so we rely on (math) idempotence
+    // of the or operator: a or a = a.
+    sigorset(&savedSignalMask, sigs, sigs);
+#else
+    // Without sigorset, our best bet is to assume that sigset_t is a type that
+    // can be assigned directly, such as is the case for a sigset_t defined as
+    // an integer type.
+    savedSignalMask = *sigs;
+#endif
+
+    savedSignalMaskIsSet = true;
+}
+
+void saveSignalMask() {
+    if (sigprocmask(SIG_BLOCK, nullptr, &savedSignalMask))
+        throw SysError("querying signal mask");
+
+    savedSignalMaskIsSet = true;
+}
 
 void startSignalHandlerThread()
 {
     updateWindowSize();
 
-    if (sigprocmask(SIG_BLOCK, nullptr, &savedSignalMask))
-        throw SysError("querying signal mask");
+    saveSignalMask();
 
     sigset_t set;
     sigemptyset(&set);
@@ -1714,6 +1796,20 @@ void startSignalHandlerThread()
 
 static void restoreSignals()
 {
+    // If startSignalHandlerThread wasn't called, that means we're not running
+    // in a proper libmain process, but a process that presumably manages its
+    // own signal handlers. Such a process should call either
+    //  - initNix(), to be a proper libmain process
+    //  - startSignalHandlerThread(), to resemble libmain regarding signal
+    //    handling only
+    //  - saveSignalMask(), for processes that define their own signal handling
+    //    thread
+    // TODO: Warn about this? Have a default signal mask? The latter depends on
+    //       whether we should generally inherit signal masks from the caller.
+    //       I don't know what the larger unix ecosystem expects from us here.
+    if (!savedSignalMaskIsSet)
+        return;
+
     if (sigprocmask(SIG_SETMASK, &savedSignalMask, nullptr))
         throw SysError("restoring signals");
 }
@@ -1915,7 +2011,7 @@ std::string showBytes(uint64_t bytes)
 
 
 // FIXME: move to libstore/build
-void commonChildInit(Pipe & logPipe)
+void commonChildInit()
 {
     logger = makeSimpleLogger();
 
@@ -1928,10 +2024,6 @@ void commonChildInit(Pipe & logPipe)
        terminal signals. */
     if (setsid() == -1)
         throw SysError("creating a new session");
-
-    /* Dup the write side of the logger pipe into stderr. */
-    if (dup2(logPipe.writeSide.get(), STDERR_FILENO) == -1)
-        throw SysError("cannot pipe standard error into log file");
 
     /* Dup stderr to stdout. */
     if (dup2(STDERR_FILENO, STDOUT_FILENO) == -1)

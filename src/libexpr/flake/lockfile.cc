@@ -219,7 +219,7 @@ std::optional<FlakeRef> LockFile::isUnlocked() const
     visit(root);
 
     for (auto & i : nodes) {
-        if (i == root) continue;
+        if (i == ref<const Node>(root)) continue;
         auto node = i.dynamic_pointer_cast<const LockedNode>();
         if (node && !node->lockedRef.input.isLocked())
             return node->lockedRef;
@@ -232,6 +232,11 @@ bool LockFile::operator ==(const LockFile & other) const
 {
     // FIXME: slow
     return toJSON() == other.toJSON();
+}
+
+bool LockFile::operator !=(const LockFile & other) const
+{
+    return !(*this == other);
 }
 
 InputPath parseInputPath(std::string_view s)

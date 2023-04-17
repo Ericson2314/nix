@@ -147,9 +147,8 @@ nlohmann::json Config::toJSON()
 {
     auto res = nlohmann::json::object();
     for (auto & s : _settings)
-        if (!s.second.isAlias) {
+        if (!s.second.isAlias)
             res.emplace(s.first, s.second.setting->toJSON());
-        }
     return res;
 }
 
@@ -157,24 +156,28 @@ std::string Config::toKeyValue()
 {
     auto res = std::string();
     for (auto & s : _settings)
-        if (!s.second.isAlias) {
+        if (s.second.isAlias)
             res += fmt("%s = %s\n", s.first, s.second.setting->to_string());
-        }
     return res;
 }
 
 void Config::convertToArgs(Args & args, const std::string & category)
 {
-    for (auto & s : _settings)
+    for (auto & s : _settings) {
         if (!s.second.isAlias)
             s.second.setting->convertToArg(args, category);
+    }
 }
 
 AbstractSetting::AbstractSetting(
     const std::string & name,
     const std::string & description,
-    const std::set<std::string> & aliases)
-    : name(name), description(stripIndentation(description)), aliases(aliases)
+    const std::set<std::string> & aliases,
+    std::optional<ExperimentalFeature> experimentalFeature)
+    : name(name)
+    , description(stripIndentation(description))
+    , aliases(aliases)
+    , experimentalFeature(experimentalFeature)
 {
 }
 
@@ -188,6 +191,10 @@ std::map<std::string, nlohmann::json> AbstractSetting::toJSONObject()
     std::map<std::string, nlohmann::json> obj;
     obj.emplace("description", description);
     obj.emplace("aliases", aliases);
+    if (experimentalFeature)
+        obj.emplace("experimentalFeature", *experimentalFeature);
+    else
+        obj.emplace("experimentalFeature", nullptr);
     return obj;
 }
 
@@ -209,7 +216,8 @@ void BaseSetting<T>::convertToArg(Args & args, const std::string & category)
         .description = fmt("Set the `%s` setting.", name),
         .category = category,
         .labels = {"value"},
-        .handler = {[=](std::string s) { overridden = true; set(s); }},
+        .handler = {[this](std::string s) { overridden = true; set(s); }},
+        .experimentalFeature = experimentalFeature,
     });
 
     if (isAppendable())
@@ -218,7 +226,8 @@ void BaseSetting<T>::convertToArg(Args & args, const std::string & category)
             .description = fmt("Append to the `%s` setting.", name),
             .category = category,
             .labels = {"value"},
-            .handler = {[=](std::string s) { overridden = true; set(s, true); }},
+            .handler = {[this](std::string s) { overridden = true; set(s, true); }},
+            .experimentalFeature = experimentalFeature,
         });
 }
 
@@ -270,13 +279,15 @@ template<> void BaseSetting<bool>::convertToArg(Args & args, const std::string &
         .longName = name,
         .description = fmt("Enable the `%s` setting.", name),
         .category = category,
-        .handler = {[=]() { override(true); }}
+        .handler = {[this]() { override(true); }},
+        .experimentalFeature = experimentalFeature,
     });
     args.addFlag({
         .longName = "no-" + name,
         .description = fmt("Disable the `%s` setting.", name),
         .category = category,
-        .handler = {[=]() { override(false); }}
+        .handler = {[this]() { override(false); }},
+        .experimentalFeature = experimentalFeature,
     });
 }
 
@@ -442,6 +453,32 @@ GlobalConfig::Register::Register(Config * config)
     if (!configRegistrations)
         configRegistrations = new ConfigRegistrations;
     configRegistrations->emplace_back(config);
+}
+
+ExperimentalFeatureSettings experimentalFeatureSettings;
+
+static GlobalConfig::Register rSettings(&experimentalFeatureSettings);
+
+bool ExperimentalFeatureSettings::isEnabled(const ExperimentalFeature & feature) const
+{
+    auto & f = experimentalFeatures.get();
+    return std::find(f.begin(), f.end(), feature) != f.end();
+}
+
+void ExperimentalFeatureSettings::require(const ExperimentalFeature & feature) const
+{
+    if (!isEnabled(feature))
+        throw MissingExperimentalFeature(feature);
+}
+
+bool ExperimentalFeatureSettings::isEnabled(const std::optional<ExperimentalFeature> & feature) const
+{
+    return !feature || isEnabled(*feature);
+}
+
+void ExperimentalFeatureSettings::require(const std::optional<ExperimentalFeature> & feature) const
+{
+    if (feature) require(*feature);
 }
 
 }
