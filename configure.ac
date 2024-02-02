@@ -67,6 +67,13 @@ case "$host_os" in
     ;;
 esac
 
+# FreeBSD-specific stuff.
+case "$host_os" in
+  freebsd*)
+    LDFLAGS="-ljail $LDFLAGS"
+    ;;
+esac
+
 
 ENSURE_NO_GCC_BUG_80431
 

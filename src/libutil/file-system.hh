@@ -235,4 +235,17 @@ typedef std::function<bool(const Path & path)> PathFilter;
 
 extern PathFilter defaultPathFilter;
 
+#if __FreeBSD__
+class AutoUnmount
+{
+    Path path;
+    bool del;
+public:
+    AutoUnmount(Path&);
+    AutoUnmount();
+    ~AutoUnmount();
+    void cancel();
+};
+#endif
+
 }

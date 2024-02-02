@@ -17,6 +17,11 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#ifdef __FreeBSD__
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace nix {
@@ -348,10 +353,25 @@ void syncParent(const Path & path)
     fd.fsync();
 }
 
+#if __FreeBSD__
+#define MOUNTEDPATHS_PARAM , std::set<Path> &mountedPaths
+#define MOUNTEDPATHS_ARG , mountedPaths
+#else
+#define MOUNTEDPATHS_PARAM
+#define MOUNTEDPATHS_ARG
+#endif
 
-static void _deletePath(int parentfd, const Path & path, uint64_t & bytesFreed)
+static void _deletePath(int parentfd, const Path & path, uint64_t & bytesFreed MOUNTEDPATHS_PARAM)
 {
     checkInterrupt();
+
+#if __FreeBSD__
+    // In case of emergency (unmount fails for some reason) not recurse into mountpoints.
+    // This prevents us from tearing up the nullfs-mounted nix store.
+    if (mountedPaths.find(path) != mountedPaths.end()) {
+        return;
+    }
+#endif
 
     std::string name(baseNameOf(path));
 
@@ -400,7 +420,7 @@ static void _deletePath(int parentfd, const Path & path, uint64_t & bytesFreed)
         if (!dir)
             throw SysError("opening directory '%1%'", path);
         for (auto & i : readDirectory(dir.get(), path))
-            _deletePath(dirfd(dir.get()), path + "/" + i.name, bytesFreed);
+            _deletePath(dirfd(dir.get()), path + "/" + i.name, bytesFreed MOUNTEDPATHS_ARG);
     }
 
     int flags = S_ISDIR(st.st_mode) ? AT_REMOVEDIR : 0;
@@ -410,7 +430,7 @@ static void _deletePath(int parentfd, const Path & path, uint64_t & bytesFreed)
     }
 }
 
-static void _deletePath(const Path & path, uint64_t & bytesFreed)
+static void _deletePath(const Path & path, uint64_t & bytesFreed MOUNTEDPATHS_PARAM)
 {
     Path dir = dirOf(path);
     if (dir == "")
@@ -422,7 +442,7 @@ static void _deletePath(const Path & path, uint64_t & bytesFreed)
         throw SysError("opening directory '%1%'", path);
     }
 
-    _deletePath(dirfd.get(), path, bytesFreed);
+    _deletePath(dirfd.get(), path, bytesFreed MOUNTEDPATHS_ARG);
 }
 
 
@@ -459,8 +479,21 @@ Paths createDirs(const Path & path)
 void deletePath(const Path & path, uint64_t & bytesFreed)
 {
     //Activity act(*logger, lvlDebug, "recursively deleting path '%1%'", path);
+#if __FreeBSD__
+    printf("Goodbye %s\n", path.c_str());
+    std::set<Path> mountedPaths;
+    struct statfs *mntbuf;
+    int count;
+    if ((count = getmntinfo(&mntbuf, MNT_WAIT)) < 0) {
+        throw SysError("getmntinfo");
+    }
+
+    for (int i = 0; i < count; i++) {
+        mountedPaths.emplace(mntbuf[i].f_mntonname);
+    }
+#endif
     bytesFreed = 0;
-    _deletePath(path, bytesFreed);
+    _deletePath(path, bytesFreed MOUNTEDPATHS_ARG);
 }
 
 
@@ -502,6 +535,31 @@ void AutoDelete::reset(const Path & p, bool recursive) {
 }
 
 //////////////////////////////////////////////////////////////////////
+
+# if __FreeBSD__
+AutoUnmount::AutoUnmount() : del{false} {}
+
+AutoUnmount::AutoUnmount(Path &p) : path(p), del(true) {}
+
+AutoUnmount::~AutoUnmount()
+{
+    try {
+        if (del) {
+            printf("Goodbye mount %s\n", path.c_str());
+            if (unmount(path.c_str(), 0) < 0) {
+                throw SysError("Failed to unmount path %1%", path);
+            }
+        }
+    } catch (...) {
+        ignoreException();
+    }
+}
+
+void AutoUnmount::cancel()
+{
+    del = false;
+}
+#endif
 
 //////////////////////////////////////////////////////////////////////
 
