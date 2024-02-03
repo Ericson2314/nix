@@ -480,7 +480,6 @@ void deletePath(const Path & path, uint64_t & bytesFreed)
 {
     //Activity act(*logger, lvlDebug, "recursively deleting path '%1%'", path);
 #if __FreeBSD__
-    printf("Goodbye %s\n", path.c_str());
     std::set<Path> mountedPaths;
     struct statfs *mntbuf;
     int count;
@@ -545,7 +544,6 @@ AutoUnmount::~AutoUnmount()
 {
     try {
         if (del) {
-            printf("Goodbye mount %s\n", path.c_str());
             if (unmount(path.c_str(), 0) < 0) {
                 throw SysError("Failed to unmount path %1%", path);
             }

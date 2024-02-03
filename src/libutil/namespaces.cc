@@ -172,7 +172,6 @@ AutoRemoveJail::~AutoRemoveJail()
 {
     try {
         if (del) {
-            printf("Goodbye jail %d\n", jid);
             if (jail_remove(jid) < 0) {
                 throw SysError("Failed to remove jail %1%", jid);
             }
