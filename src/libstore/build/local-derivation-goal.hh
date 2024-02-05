@@ -58,7 +58,11 @@ struct LocalDerivationGoal : public DerivationGoal
      * On Linux, whether we're doing the build in its own user
      * namespace.
      */
+#if __linux__
     bool usingUserNamespace = true;
+#else
+    bool usingUserNamespace = false;
+#endif
 
     /**
      * Whether we're currently doing a chroot build.
