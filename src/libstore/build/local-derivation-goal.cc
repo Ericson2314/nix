@@ -791,7 +791,7 @@ void LocalDerivationGoal::startBuilder()
         /* Fixed-output derivations typically need to access the
            network, so give them access to /etc/resolv.conf and so
            on. */
-        if (!derivationType.isSandboxed()) {
+        if (!derivationType->isSandboxed()) {
             // Only use nss functions to resolve hosts and
             // services. Don’t use it for anything else that may
             // be configured for this system. This limits the
@@ -803,13 +803,13 @@ void LocalDerivationGoal::startBuilder()
                within a pure derivation. */
             for (auto & path : { "/etc/resolv.conf", "/etc/services", "/etc/hosts" })
                 if (pathExists(path))
-                    dirsInChroot.try_emplace(path, path, true);
+                    pathsInChroot.try_emplace(path, path, true);
 
             if (settings.caFile != "")
-                dirsInChroot.try_emplace("/etc/ssl/certs/ca-certificates.crt", settings.caFile, true);
+                pathsInChroot.try_emplace("/etc/ssl/certs/ca-certificates.crt", settings.caFile, true);
         }
 
-        for (auto & i : dirsInChroot) {
+        for (auto & i : pathsInChroot) {
             char errmsg[255];
             errmsg[0] = 0;
 
