@@ -1,6 +1,6 @@
 # NOTE: instances of @variable@ are substituted as defined in /mk/templates.mk
 
-export PATH=@bindir@:$PATH
+bindir=@bindir@
 export coreutils=@coreutils@
 #lsof=@lsof@
 

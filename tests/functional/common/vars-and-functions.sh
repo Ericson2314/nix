@@ -12,9 +12,12 @@ commonDir="$(readlink -f "$(dirname "${BASH_SOURCE[0]-$0}")")"
 
 source "$commonDir/subst-vars.sh"
 # Make sure shellcheck knows all these will be defined by the above generated snippet
-: "${PATH?} ${coreutils?} ${dot?} ${SHELL?} ${PAGER?} ${busybox?} ${version?} ${system?} ${BUILD_SHARED_LIBS?}"
+: "${bindir?} ${coreutils?} ${dot?} ${SHELL?} ${PAGER?} ${busybox?} ${version?} ${system?} ${BUILD_SHARED_LIBS?}"
 
-export TEST_ROOT=$(realpath ${TMPDIR:-/tmp}/nix-test)/${TEST_NAME:-default/tests\/functional//}
+export PATH="$bindir:$PATH"
+
+source "$commonDir/test-root.sh"
+
 export NIX_STORE_DIR
 if ! NIX_STORE_DIR=$(readlink -f $TEST_ROOT/store 2> /dev/null); then
     # Maybe the build directory is symlinked.
