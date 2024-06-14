@@ -1,4 +1,4 @@
-derivation {
+{
   name = "advanced-attributes-structured-attrs-defaults";
   system = "my-system";
   builder = "/bin/bash";

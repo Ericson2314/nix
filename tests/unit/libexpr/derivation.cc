@@ -3,6 +3,7 @@
 #include "tests/characterization.hh"
 #include "tests/libexpr.hh"
 #include "derivations.hh"
+#include "primops.hh"
 
 namespace nix {
 
@@ -17,29 +18,24 @@ public:
     }
 };
 
-#define EXPR_DRV_TEST(NAME, STEM)                                                               \
-    TEST_F(DerivationTest, Derivation_##NAME)                                                   \
-    {                                                                                           \
-        writeTest(                                                                              \
-            STEM ".drv",                                                                        \
-            [&]() -> Derivation {                                                               \
-                Value v = eval(readFile(goldenMaster(STEM ".nix")));                            \
-                Symbol s = state.symbols.create("drvPath");                                     \
-                auto attr = v.attrs() -> get(s);                                                \
-                state.forceValueDeep(*attr->value);                                             \
-                NixStringContext context;                                                       \
-                auto storePath = state.coerceToStorePath(attr->pos, *attr->value, context, ""); \
-                                                                                                \
-                return store->readDerivation(storePath);                                        \
-            },                                                                                  \
-            [&](const auto & file) {                                                            \
-                auto s = readFile(file);                                                        \
-                return parseDerivation(*store, std::move(s), STEM);                             \
-            },                                                                                  \
-            [&](const auto & file, const auto & got) {                                          \
-                auto s = got.unparse(*store, false);                                            \
-                return writeFile(file, std::move(s));                                           \
-            });                                                                                 \
+#define EXPR_DRV_TEST(NAME, STEM)                                                                           \
+    TEST_F(DerivationTest, Derivation_##NAME)                                                               \
+    {                                                                                                       \
+        writeTest(                                                                                          \
+            STEM ".drv",                                                                                    \
+            [&]() -> Derivation {                                                                           \
+                Value v = eval(readFile(goldenMaster(STEM ".nix")));                                        \
+                auto [attrs, drvName, _namePos] = derivationStrictInternalGetNameAndAttrs(state, noPos, v); \
+                return derivationStrictInternalReturning(state, drvName, attrs, noPos);                     \
+            },                                                                                              \
+            [&](const auto & file) {                                                                        \
+                auto s = readFile(file);                                                                    \
+                return parseDerivation(*store, std::move(s), STEM);                                         \
+            },                                                                                              \
+            [&](const auto & file, const auto & got) {                                                      \
+                auto s = got.unparse(*store, false);                                                        \
+                return writeFile(file, std::move(s));                                                       \
+            });                                                                                             \
     }
 
 EXPR_DRV_TEST(advancedAttributes, "advanced-attributes");

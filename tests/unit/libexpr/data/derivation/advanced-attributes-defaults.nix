@@ -1,4 +1,4 @@
-derivation {
+{
   name = "advanced-attributes-defaults";
   system = "my-system";
   builder = "/bin/bash";

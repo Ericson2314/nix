@@ -63,6 +63,11 @@ TEST_F(nix_api_expr_test, nix_expr_eval_drv)
 
 TEST_F(nix_api_expr_test, nix_build_drv)
 {
+    // FIXME this is ugly and will prevent running the tests in
+    // parallel. #5638 tracks
+    auto old = nix::settings.readOnlyMode;
+    nix::settings.readOnlyMode = false;
+
     auto expr = R"(derivation { name = "myname";
                                 system = builtins.currentSystem;
                                 builder = "/bin/sh";
@@ -103,6 +108,9 @@ TEST_F(nix_api_expr_test, nix_build_drv)
     // Clean up
     nix_store_path_free(drvStorePath);
     nix_store_path_free(outStorePath);
+
+    // FIXME remove. see above
+    nix::settings.readOnlyMode = old;
 }
 
 TEST_F(nix_api_expr_test, nix_expr_realise_context_bad_value)
@@ -118,6 +126,11 @@ TEST_F(nix_api_expr_test, nix_expr_realise_context_bad_value)
 
 TEST_F(nix_api_expr_test, nix_expr_realise_context_bad_build)
 {
+    // FIXME this is ugly and will prevent running the tests in
+    // parallel. #5638 tracks
+    auto old = nix::settings.readOnlyMode;
+    nix::settings.readOnlyMode = false;
+
     auto expr = R"(
         derivation { name = "letsbuild";
             system = builtins.currentSystem;
@@ -131,10 +144,18 @@ TEST_F(nix_api_expr_test, nix_expr_realise_context_bad_build)
     ASSERT_EQ(nullptr, r);
     ASSERT_EQ(ctx->last_err_code, NIX_ERR_NIX_ERROR);
     ASSERT_THAT(ctx->last_err, testing::Optional(testing::HasSubstr("failed with exit code 1")));
+
+    // FIXME remove. see above
+    nix::settings.readOnlyMode = old;
 }
 
 TEST_F(nix_api_expr_test, nix_expr_realise_context)
 {
+    // FIXME this is ugly and will prevent running the tests in
+    // parallel. #5638 tracks
+    auto old = nix::settings.readOnlyMode;
+    nix::settings.readOnlyMode = false;
+
     // TODO (ca-derivations): add a content-addressed derivation output, which produces a placeholder
     auto expr = R"(
         ''
@@ -189,6 +210,9 @@ TEST_F(nix_api_expr_test, nix_expr_realise_context)
     EXPECT_THAT(names[2], testing::StrEq("not-actually-built-yet.drv"));
 
     nix_realised_string_free(r);
+
+    // FIXME remove. see above
+    nix::settings.readOnlyMode = old;
 }
 
 const char * SAMPLE_USER_DATA = "whatever";

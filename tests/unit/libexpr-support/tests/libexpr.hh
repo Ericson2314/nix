@@ -19,6 +19,7 @@ namespace nix {
             static void SetUpTestSuite() {
                 LibStoreTest::SetUpTestSuite();
                 initGC();
+                settings.readOnlyMode = true;
                 evalSettings.nixPath = {};
             }
 

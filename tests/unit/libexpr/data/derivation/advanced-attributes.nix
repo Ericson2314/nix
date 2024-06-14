@@ -13,7 +13,7 @@ let
     args = ["-c" "echo bar > $out"];
   };
 in
-derivation {
+{
   inherit system;
   name = "advanced-attributes";
   builder = "/bin/bash";

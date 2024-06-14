@@ -1104,10 +1104,9 @@ static void prim_second(EvalState & state, const PosIdx pos, Value * * args, Val
  * Derivations
  *************************************************************/
 
-static void derivationStrictInternal(
+static void derivationStrictInternalBuildResult(
     EvalState & state,
-    const std::string & name,
-    const Bindings * attrs,
+    const Derivation & drv,
     Value & v);
 
 /* Construct (as a unobservable side effect) a Nix derivation
@@ -1119,25 +1118,14 @@ static void derivationStrictInternal(
    derivation. */
 static void prim_derivationStrict(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
-    state.forceAttrs(*args[0], pos, "while evaluating the argument passed to builtins.derivationStrict");
-
-    auto attrs = args[0]->attrs();
-
-    /* Figure out the name first (for stack backtraces). */
-    auto nameAttr = getAttr(state, state.sName, attrs, "in the attrset passed as argument to builtins.derivationStrict");
-
-    std::string drvName;
-    try {
-        drvName = state.forceStringNoCtx(*nameAttr->value, pos, "while evaluating the `name` attribute passed to builtins.derivationStrict");
-    } catch (Error & e) {
-        e.addTrace(state.positions[nameAttr->pos], "while evaluating the derivation attribute 'name'");
-        throw;
-    }
+    auto [attrs, drvName, namePos] = derivationStrictInternalGetNameAndAttrs(state, pos, *args[0]);
 
     try {
-        derivationStrictInternal(state, drvName, attrs, v);
+        auto resPos = v.determinePos(noPos);
+        auto drv = derivationStrictInternalReturning(state, drvName, attrs, resPos);
+        derivationStrictInternalBuildResult(state, drv, v);
     } catch (Error & e) {
-        Pos pos = state.positions[nameAttr->pos];
+        Pos pos = state.positions[namePos];
         /*
          * Here we make two abuses of the error system
          *
@@ -1163,16 +1151,41 @@ static void prim_derivationStrict(EvalState & state, const PosIdx pos, Value * *
     }
 }
 
-static void derivationStrictInternal(
+std::tuple<const Bindings *, std::string, const PosIdx>
+derivationStrictInternalGetNameAndAttrs(
     EvalState & state,
-    const std::string & drvName,
+    const PosIdx pos,
+    Value & arg)
+{
+    state.forceAttrs(arg, pos, "while evaluating the argument passed to builtins.derivationStrict");
+
+    auto attrs = arg.attrs();
+
+    /* Figure out the name first (for stack backtraces). */
+    auto nameAttr = getAttr(state, state.sName, attrs, "in the attrset passed as argument to builtins.derivationStrict");
+
+    std::string drvName;
+    try {
+        return std::tuple<const Bindings *, std::string, const PosIdx>{
+            attrs,
+            state.forceStringNoCtx(*nameAttr->value, pos, "while evaluating the `name` attribute passed to builtins.derivationStrict"),
+            nameAttr->pos,
+        };
+    } catch (Error & e) {
+        e.addTrace(state.positions[nameAttr->pos], "while evaluating the derivation attribute 'name'");
+        throw;
+    }
+}
+
+Derivation derivationStrictInternalReturning(
+    EvalState & state,
+    std::string_view drvName,
     const Bindings * attrs,
-    Value & v)
+    const PosIdx pos)
 {
     /* Check whether attributes should be passed as a JSON file. */
     using nlohmann::json;
     std::optional<json> jsonObject;
-    auto pos = v.determinePos(noPos);
     auto attr = attrs->find(state.sStructuredAttrs);
     if (attr != attrs->end() &&
         state.forceBool(*attr->value, pos,
@@ -1215,7 +1228,7 @@ static void derivationStrictInternal(
             } catch (UsageError &) {
                 state.error<EvalError>(
                     "invalid value '%s' for 'outputHashMode' attribute", s
-                ).atPos(v).debugThrow();
+                ).atPos(pos).debugThrow();
             }
             if (ingestionMethod == TextIngestionMethod {})
                 experimentalFeatureSettings.require(Xp::DynamicDerivations);
@@ -1228,7 +1241,7 @@ static void derivationStrictInternal(
             for (auto & j : ss) {
                 if (outputs.find(j) != outputs.end())
                     state.error<EvalError>("duplicate derivation output '%1%'", j)
-                        .atPos(v)
+                        .atPos(pos)
                         .debugThrow();
                 /* !!! Check whether j is a valid attribute
                    name. */
@@ -1237,13 +1250,13 @@ static void derivationStrictInternal(
                    the resulting set (see state.sDrvPath). */
                 if (j == "drvPath")
                     state.error<EvalError>("invalid derivation output name 'drvPath'")
-                        .atPos(v)
+                        .atPos(pos)
                         .debugThrow();
                 outputs.insert(j);
             }
             if (outputs.empty())
                 state.error<EvalError>("derivation cannot have an empty set of outputs")
-                    .atPos(v)
+                    .atPos(pos)
                     .debugThrow();
         };
 
@@ -1367,12 +1380,12 @@ static void derivationStrictInternal(
     /* Do we have all required attributes? */
     if (drv.builder == "")
         state.error<EvalError>("required attribute 'builder' missing")
-            .atPos(v)
+            .atPos(pos)
             .debugThrow();
 
     if (drv.platform == "")
         state.error<EvalError>("required attribute 'system' missing")
-            .atPos(v)
+            .atPos(pos)
             .debugThrow();
 
     /* Check whether the derivation name is valid. */
@@ -1384,7 +1397,7 @@ static void derivationStrictInternal(
         state.error<EvalError>(
             "derivation names are allowed to end in '%s' only if they produce a single derivation file",
             drvExtension
-        ).atPos(v).debugThrow();
+        ).atPos(pos).debugThrow();
     }
 
     if (outputHash) {
@@ -1395,7 +1408,7 @@ static void derivationStrictInternal(
         if (outputs.size() != 1 || *(outputs.begin()) != "out")
             state.error<EvalError>(
                 "multiple outputs are not supported in fixed-output derivations"
-            ).atPos(v).debugThrow();
+            ).atPos(pos).debugThrow();
 
         auto h = newHashAllowEmpty(*outputHash, outputHashAlgo);
 
@@ -1415,7 +1428,7 @@ static void derivationStrictInternal(
     else if (contentAddressed || isImpure) {
         if (contentAddressed && isImpure)
             state.error<EvalError>("derivation cannot be both content-addressed and impure")
-                .atPos(v).debugThrow();
+                .atPos(pos).debugThrow();
 
         auto ha = outputHashAlgo.value_or(HashAlgorithm::SHA256);
         auto method = ingestionMethod.value_or(FileIngestionMethod::Recursive);
@@ -1459,7 +1472,7 @@ static void derivationStrictInternal(
                     state.error<AssertionError>(
                         "derivation produced no hash for output '%s'",
                         i
-                    ).atPos(v).debugThrow();
+                    ).atPos(pos).debugThrow();
                 auto outPath = state.store->makeOutputPath(i, *h, drvName);
                 drv.env[i] = state.store->printStorePath(outPath);
                 drv.outputs.insert_or_assign(
@@ -1477,11 +1490,19 @@ static void derivationStrictInternal(
         }
     }
 
+    return drv;
+}
+
+static void derivationStrictInternalBuildResult(
+    EvalState & state,
+    const Derivation & drv,
+    Value & v)
+{
     /* Write the resulting term into the Nix store directory. */
     auto drvPath = writeDerivation(*state.store, drv, state.repair);
     auto drvPathS = state.store->printStorePath(drvPath);
 
-    printMsg(lvlChatty, "instantiated '%1%' -> '%2%'", drvName, drvPathS);
+    printMsg(lvlChatty, "instantiated '%1%' -> '%2%'", drv.name, drvPathS);
 
     /* Optimisation, but required in read-only mode! because in that
        case we don't actually write store derivations, so we can't

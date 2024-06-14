@@ -53,4 +53,28 @@ void prim_exec(EvalState & state, const PosIdx pos, Value * * args, Value & v);
 
 void makePositionThunks(EvalState & state, const PosIdx pos, Value & line, Value & column);
 
+struct Derivation;
+
+/**
+ * Get the `name` field and attribute set of `builtins.derivationStrict`
+ * arguments
+ *
+ * Exposed for unit testing purposes.
+ */
+std::tuple<const Bindings *, std::string, const PosIdx>
+derivationStrictInternalGetNameAndAttrs(
+    EvalState & state,
+    const PosIdx pos,
+    Value & arg);
+
+/**
+ * @returns The derivation produced by `builtins.derivationStrict`
+ *
+ * Exposed for unit testing purposes.
+ */
+Derivation derivationStrictInternalReturning(
+    EvalState & state,
+    std::string_view name,
+    const Bindings * attrs,
+    const PosIdx pos);
 }
