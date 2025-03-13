@@ -52,15 +52,14 @@ enum struct JobCategory {
     Substitution,
 };
 
+struct WaitingGoal;
+
+using WaitingGoalPtr = std::shared_ptr<WaitingGoal>;
+using WeakWaitingGoalPtr = std::weak_ptr<WaitingGoal>;
+using WeakWaitingGoals = std::set<WeakWaitingGoalPtr, std::owner_less<WeakWaitingGoalPtr>>;
+
 struct Goal : public std::enable_shared_from_this<Goal>
 {
-private:
-    /**
-     * Goals that this goal is waiting for.
-     */
-    Goals waitees;
-
-public:
     typedef enum {ecBusy, ecSuccess, ecFailed, ecNoSubstituters, ecIncompleteClosure} ExitCode;
 
     /**
@@ -72,7 +71,7 @@ public:
      * Goals waiting for this one to finish.  Must use weak pointers
      * here to prevent cycles.
      */
-    WeakGoals waiters;
+    WeakWaitingGoals waiters;
 
     /**
      * Number of goals we are/were waiting for that have failed.
@@ -437,8 +436,6 @@ protected:
     Co waitForBuildSlot();
     Co yield();
 };
-
-void addToWeakGoals(WeakGoals & goals, GoalPtr p);
 
 }
 

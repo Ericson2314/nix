@@ -125,23 +125,30 @@ BuildResult Goal::getBuildResult(const DerivedPath & req) const {
 }
 
 
-void addToWeakGoals(WeakGoals & goals, GoalPtr p)
+struct WaitingGoal
 {
-    if (goals.find(p) != goals.end())
-        return;
-    goals.insert(p);
-}
+    /**
+     * The goal that is waiting
+     */
+    WeakGoalPtr waiter;
 
-Co Goal::await(Goals new_waitees)
+    /**
+     * Goals that `waiter` is waiting for.
+     */
+    Goals waitees;
+};
+
+
+Co Goal::await(Goals waitees)
 {
-    assert(waitees.empty());
-    if (!new_waitees.empty()) {
-        waitees = std::move(new_waitees);
-        for (auto waitee : waitees) {
-            addToWeakGoals(waitee->waiters, shared_from_this());
+    if (!waitees.empty()) {
+        auto waiting = std::make_shared<WaitingGoal>(shared_from_this(), std::move(waitees));
+        for (auto waitee : waiting->waitees) {
+            if (waitee->waiters.find(waiting) != waitee->waiters.end())
+                continue;
+            waitee->waiters.insert(waiting);
         }
         co_await Suspend{};
-        assert(waitees.empty());
     }
     co_return Return{};
 }
@@ -162,13 +169,19 @@ Goal::Done Goal::amDone(ExitCode result, std::optional<Error> ex)
     }
 
     for (auto & i : waiters) {
-        GoalPtr goal = i.lock();
-        if (goal) {
+        WaitingGoalPtr waitingGoal = i.lock();
+        if (waitingGoal) {
             auto me = shared_from_this();
-            assert(goal->waitees.count(me));
-            goal->waitees.erase(me);
+            assert(waitingGoal->waitees.count(me));
+            waitingGoal->waitees.erase(me);
 
-            goal->trace(fmt("waitee '%s' done; %d left", name, goal->waitees.size()));
+            auto goal = waitingGoal->waiter.lock();
+
+            /* `waitingGoal` is only owned by `goal`, so if one is alive
+               the other must be. */
+            assert(goal);
+
+            goal->trace(fmt("waitee '%s' done; %d left", name, waitingGoal->waitees.size()));
 
             if (result == ecFailed || result == ecNoSubstituters || result == ecIncompleteClosure) ++goal->nrFailed;
 
@@ -176,15 +189,15 @@ Goal::Done Goal::amDone(ExitCode result, std::optional<Error> ex)
 
             if (result == ecIncompleteClosure) ++goal->nrIncompleteClosure;
 
-            if (goal->waitees.empty()) {
+            if (waitingGoal->waitees.empty()) {
                 worker.wakeUp(goal);
             } else if (result == ecFailed && !settings.keepGoing) {
                 /* If we failed and keepGoing is not set, we remove all
                    remaining waitees. */
-                for (auto & g : goal->waitees) {
-                    g->waiters.extract(goal);
+                for (auto & g : waitingGoal->waitees) {
+                    g->waiters.extract(waitingGoal);
                 }
-                goal->waitees.clear();
+                waitingGoal->waitees.clear();
 
                 worker.wakeUp(goal);
             }

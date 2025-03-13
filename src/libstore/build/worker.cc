@@ -177,6 +177,15 @@ void Worker::removeGoal(GoalPtr goal)
 }
 
 
+static void addToWeakGoals(WeakGoals & goals, GoalPtr p)
+{
+    if (goals.find(p) != goals.end())
+        return;
+    goals.insert(p);
+}
+
+
+
 void Worker::wakeUp(GoalPtr goal)
 {
     goal->trace("woken up");
