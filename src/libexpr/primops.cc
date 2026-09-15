@@ -1001,9 +1001,7 @@ static RegisterPrimOp primop_abort(
                       .coerceToString(
                           noPos, *args[0], context, "while evaluating the error message passed to builtins.abort")
                       .toOwned();
-         state.error<Abort>("evaluation aborted with the following error message: '%1%'", s)
-             .setIsFromExpr()
-             .debugThrow();
+         state.error<Abort>(s).setIsFromExpr().debugThrow();
      }});
 
 static RegisterPrimOp primop_throw(

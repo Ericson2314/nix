@@ -395,6 +395,22 @@ protected:
 template<typename Base>
 class Unstructured : public Base
 {
+protected:
+    /**
+     * For structured errors that derive from an unstructured one: they
+     * override `renderMessage`, so have no use for `hint`, but must still
+     * pass through here on the way to `Base`. The tag keeps this from
+     * competing with the constructors below in overload resolution.
+     */
+    struct NoHint
+    {};
+
+    Unstructured(NoHint, ErrorInfo && e)
+        : Base(std::move(e))
+        , hint("")
+    {
+    }
+
 public:
     /**
      * The pre-formatted message.

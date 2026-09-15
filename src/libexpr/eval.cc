@@ -953,10 +953,7 @@ void Value::mkPath(const SourcePath & path, EvalMemory & mem)
             return j->value;
         }
         if (!fromWith->parentWith) [[unlikely]]
-            error<UndefinedVarError>("undefined variable '%1%'", symbols[var.name])
-                .atPos(var.pos)
-                .withFrame(*env, var)
-                .debugThrow();
+            error<UndefinedVarError>(std::string(symbols[var.name])).atPos(var.pos).withFrame(*env, var).debugThrow();
         for (size_t l = fromWith->prevWith; l; --l, env = env->up)
             ;
         fromWith = fromWith->parentWith;
@@ -1215,11 +1212,7 @@ inline bool EvalState::evalBool(Env & env, Expr * e, std::string_view errorCtx)
         Value v;
         e->eval(*this, env, v);
         if (v.type() != nBool)
-            error<TypeError>(
-                "expected a Boolean but found %1%: %2%", showType(v), ValuePrinter(*this, v, errorPrintOptions))
-                .atPos(pos)
-                .withFrame(env, *e)
-                .debugThrow();
+            error<UnexpectedTypeError>(nBool, v).atPos(pos).withFrame(env, *e).debugThrow();
         return v.boolean();
     } catch (Error & e) {
         e.addTrace(positions[pos], errorCtx);
@@ -1233,10 +1226,7 @@ inline void EvalState::evalAttrs(Env & env, Expr * e, Value & v, std::string_vie
     try {
         e->eval(*this, env, v);
         if (v.type() != nAttrs)
-            error<TypeError>(
-                "expected a set but found %1%: %2%", showType(v), ValuePrinter(*this, v, errorPrintOptions))
-                .withFrame(env, *e)
-                .debugThrow();
+            error<UnexpectedTypeError>(nAttrs, v).withFrame(env, *e).debugThrow();
     } catch (Error & e) {
         e.addTrace(positions[pos], errorCtx);
         throw;
@@ -1879,13 +1869,7 @@ void EvalState::autoCallFunction(const Bindings & args, Value & fun, Value & res
             if (j) {
                 attrs.insert(*j);
             } else if (!i.def) {
-                error<MissingArgumentError>(
-                    R"(cannot evaluate a function that has an argument without a value ('%1%')
-Nix attempted to evaluate a function as a top level expression; in
-this case it must have its arguments supplied either by default
-values, or passed explicitly with '--arg' or '--argstr'. See
-https://nix.dev/manual/nix/stable/language/syntax.html#functions.)",
-                    symbols[i.name])
+                error<MissingArgumentError>(std::string(symbols[i.name]))
                     .atPos(i.pos)
                     .withFrame(*fun.lambda().env, *fun.lambda().fun)
                     .debugThrow();
@@ -2245,7 +2229,7 @@ void ExprBlackHole::eval(EvalState & state, [[maybe_unused]] Env & env, Value & 
 
 [[gnu::noinline]] [[noreturn]] void ExprBlackHole::throwInfiniteRecursionError(EvalState & state, Value & v)
 {
-    state.error<InfiniteRecursionError>(&v, "infinite recursion encountered").atPos(v.determinePos(noPos)).debugThrow();
+    state.error<InfiniteRecursionError>(&v).atPos(v.determinePos(noPos)).debugThrow();
 }
 
 // always force this to be separate, otherwise forceValue may inline it and take
@@ -2379,10 +2363,7 @@ NixInt EvalState::forceInt(Value & v, const PosIdx pos, std::string_view errorCt
     try {
         forceValue(v, pos);
         if (v.type() != nInt)
-            error<TypeError>(
-                "expected an integer but found %1%: %2%", showType(v), ValuePrinter(*this, v, errorPrintOptions))
-                .atPos(pos)
-                .debugThrow();
+            error<UnexpectedTypeError>(nInt, v).atPos(pos).debugThrow();
         return v.integer();
     } catch (Error & e) {
         e.addTrace(positions[pos], errorCtx);
@@ -2399,10 +2380,7 @@ NixFloat EvalState::forceFloat(Value & v, const PosIdx pos, std::string_view err
         if (v.type() == nInt)
             return v.integer().value;
         else if (v.type() != nFloat)
-            error<TypeError>(
-                "expected a float but found %1%: %2%", showType(v), ValuePrinter(*this, v, errorPrintOptions))
-                .atPos(pos)
-                .debugThrow();
+            error<UnexpectedTypeError>(nFloat, v).atPos(pos).debugThrow();
         return v.fpoint();
     } catch (Error & e) {
         e.addTrace(positions[pos], errorCtx);
@@ -2415,10 +2393,7 @@ bool EvalState::forceBool(Value & v, const PosIdx pos, std::string_view errorCtx
     try {
         forceValue(v, pos);
         if (v.type() != nBool)
-            error<TypeError>(
-                "expected a Boolean but found %1%: %2%", showType(v), ValuePrinter(*this, v, errorPrintOptions))
-                .atPos(pos)
-                .debugThrow();
+            error<UnexpectedTypeError>(nBool, v).atPos(pos).debugThrow();
         return v.boolean();
     } catch (Error & e) {
         e.addTrace(positions[pos], errorCtx);
@@ -2447,10 +2422,7 @@ void EvalState::forceFunction(Value & v, const PosIdx pos, std::string_view erro
     try {
         forceValue(v, pos);
         if (v.type() != nFunction && !isFunctor(v))
-            error<TypeError>(
-                "expected a function but found %1%: %2%", showType(v), ValuePrinter(*this, v, errorPrintOptions))
-                .atPos(pos)
-                .debugThrow();
+            error<UnexpectedTypeError>(nFunction, v).atPos(pos).debugThrow();
     } catch (Error & e) {
         e.addTrace(positions[pos], errorCtx);
         throw;
@@ -2462,10 +2434,7 @@ std::string_view EvalState::forceString(Value & v, const PosIdx pos, std::string
     try {
         forceValue(v, pos);
         if (v.type() != nString)
-            error<TypeError>(
-                "expected a string but found %1%: %2%", showType(v), ValuePrinter(*this, v, errorPrintOptions))
-                .atPos(pos)
-                .debugThrow();
+            error<UnexpectedTypeError>(nString, v).atPos(pos).debugThrow();
         return v.string_view();
     } catch (Error & e) {
         e.addTrace(positions[pos], errorCtx);
@@ -3339,10 +3308,10 @@ SourcePath EvalState::findFile(const LookupPath & lookupPath, const std::string_
     if (hasPrefix(path, "nix/"))
         return {corepkgsFS, CanonPath(path.substr(3))};
 
-    error<ThrownError>(
-        settings.pureEval ? "cannot look up '<%s>' in pure evaluation mode (use '--impure' to override)"
-                          : "file '%s' was not found in the Nix search path (add it using $NIX_PATH or -I)",
-        path)
+    error<ThrownError>(fmt(settings.pureEval
+                               ? "cannot look up '<%s>' in pure evaluation mode (use '--impure' to override)"
+                               : "file '%s' was not found in the Nix search path (add it using $NIX_PATH or -I)",
+                           path))
         .atPos(pos)
         .debugThrow();
 }

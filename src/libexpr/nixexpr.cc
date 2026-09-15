@@ -342,7 +342,7 @@ void ExprVar::bindVars(EvalState & es, const std::shared_ptr<const StaticEnv> & 
        enclosing `with'.  If there is no `with', then we can issue an
        "undefined variable" error now. */
     if (withLevel == -1)
-        es.error<UndefinedVarError>("undefined variable '%1%'", es.symbols[name]).atPos(pos).debugThrow();
+        es.error<UndefinedVarError>(std::string(es.symbols[name])).atPos(pos).debugThrow();
     for (auto * e = env.get(); e && !fromWith; e = e->up.get())
         fromWith = e->isWith;
     this->level = withLevel;

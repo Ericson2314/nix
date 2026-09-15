@@ -3,6 +3,7 @@
 #include "nix/expr/value.hh"
 #include "nix/store/store-api.hh"
 
+#include "nix/expr/print.hh"
 #include <nlohmann/json.hpp>
 
 namespace nix {
@@ -15,7 +16,141 @@ InvalidPathError::InvalidPathError(EvalState & state, const StorePath & path)
 
 std::optional<nlohmann::json> InvalidPathError::toJSON() const
 {
-    return nlohmann::json{{"path", state.store->printStorePath(path)}};
+    return nlohmann::json{{"type", "invalid-path"}, {"path", state.store->printStorePath(path)}};
+}
+
+ThrownError::ThrownError(EvalState & state, std::string text)
+    : CloneableError(state, ErrorInfo{.level = lvlError})
+    , text(std::move(text))
+{
+}
+
+HintFmt ThrownError::renderMessage() const
+{
+    return HintFmt(text);
+}
+
+std::optional<nlohmann::json> ThrownError::toJSON() const
+{
+    return nlohmann::json{{"type", "throw"}, {"message", text}};
+}
+
+Abort::Abort(EvalState & state, std::string text)
+    : CloneableError(state, ErrorInfo{.level = lvlError})
+    , text(std::move(text))
+{
+}
+
+HintFmt Abort::renderMessage() const
+{
+    return HintFmt("evaluation aborted with the following error message: '%1%'", text);
+}
+
+std::optional<nlohmann::json> Abort::toJSON() const
+{
+    return nlohmann::json{{"type", "abort"}, {"message", text}};
+}
+
+UndefinedVarError::UndefinedVarError(EvalState & state, std::string name)
+    : CloneableError(state, ErrorInfo{.level = lvlError})
+    , name(std::move(name))
+{
+}
+
+HintFmt UndefinedVarError::renderMessage() const
+{
+    return HintFmt("undefined variable '%1%'", name);
+}
+
+std::optional<nlohmann::json> UndefinedVarError::toJSON() const
+{
+    return nlohmann::json{{"type", "undefined-variable"}, {"name", name}};
+}
+
+MissingArgumentError::MissingArgumentError(EvalState & state, std::string name)
+    : CloneableError(state, ErrorInfo{.level = lvlError})
+    , name(std::move(name))
+{
+}
+
+HintFmt MissingArgumentError::renderMessage() const
+{
+    return HintFmt(
+        R"(cannot evaluate a function that has an argument without a value ('%1%')
+Nix attempted to evaluate a function as a top level expression; in
+this case it must have its arguments supplied either by default
+values, or passed explicitly with '--arg' or '--argstr'. See
+https://nix.dev/manual/nix/stable/language/syntax.html#functions.)",
+        name);
+}
+
+std::optional<nlohmann::json> MissingArgumentError::toJSON() const
+{
+    return nlohmann::json{{"type", "missing-argument"}, {"name", name}};
+}
+
+UnexpectedTypeError::UnexpectedTypeError(EvalState & state, ValueType expected, const Value & v)
+    : CloneableError(state, ErrorInfo{.level = lvlError})
+    , expected(expected)
+    , found(v.type())
+{
+    /* `ValuePrinter` takes a mutable reference, though with these options
+       it does not force anything. */
+    auto print = [&](PrintOptions options) {
+        std::ostringstream oss;
+        oss << ValuePrinter(state, const_cast<Value &>(v), options);
+        return oss.str();
+    };
+    auto plainOptions = errorPrintOptions;
+    plainOptions.ansiColors = false;
+    value = print(plainOptions);
+    valueForDisplay = print(errorPrintOptions);
+}
+
+HintFmt UnexpectedTypeError::renderMessage() const
+{
+    return HintFmt("expected %1% but found %2%: %3%", showType(expected), showType(found), valueForDisplay);
+}
+
+std::optional<nlohmann::json> UnexpectedTypeError::toJSON() const
+{
+    return nlohmann::json{
+        {"type", "unexpected-type"},
+        {"expected", showType(expected, false)},
+        {"found", showType(found, false)},
+        {"value", value},
+    };
+}
+
+InfiniteRecursionError::InfiniteRecursionError(EvalState & state, const Value * v)
+    : CloneableError(state, ErrorInfo{.level = lvlError})
+    , v(v)
+{
+}
+
+HintFmt InfiniteRecursionError::renderMessage() const
+{
+    return HintFmt("infinite recursion encountered");
+}
+
+std::optional<nlohmann::json> InfiniteRecursionError::toJSON() const
+{
+    return nlohmann::json{{"type", "infinite-recursion"}};
+}
+
+StackOverflowError::StackOverflowError(EvalState & state)
+    : CloneableError(state, ErrorInfo{.level = lvlError})
+{
+}
+
+HintFmt StackOverflowError::renderMessage() const
+{
+    return HintFmt("stack overflow; max-call-depth exceeded");
+}
+
+std::optional<nlohmann::json> StackOverflowError::toJSON() const
+{
+    return nlohmann::json{{"type", "stack-overflow"}};
 }
 
 template<class T>
@@ -122,6 +257,7 @@ template class EvalErrorBuilder<AssertionError>;
 template class EvalErrorBuilder<ThrownError>;
 template class EvalErrorBuilder<Abort>;
 template class EvalErrorBuilder<TypeError>;
+template class EvalErrorBuilder<UnexpectedTypeError>;
 template class EvalErrorBuilder<UndefinedVarError>;
 template class EvalErrorBuilder<MissingArgumentError>;
 template class EvalErrorBuilder<InfiniteRecursionError>;
@@ -143,6 +279,8 @@ void ThrownError::anchor() {}
 void Abort::anchor() {}
 
 void TypeError::anchor() {}
+
+void UnexpectedTypeError::anchor() {}
 
 void UndefinedVarError::anchor() {}
 

@@ -14,5 +14,9 @@ The daemon protocol gained the `structured-errors` feature: when both
 ends support it, an error's structured data crosses the wire together
 with its message instead of being lost.
 
-So far only `InvalidPathError` from the evaluator exposes anything; more
-errors will follow.
+The first errors to expose their content are from the evaluator:
+`builtins.throw` and `builtins.abort` (`type` `throw` and `abort`, with the
+`message`), undefined variables and missing function arguments (`name`),
+values of the wrong type (`expected`, `found`, `value`), infinite
+recursion, stack overflow, and invalid store paths (`path`). More will
+follow.

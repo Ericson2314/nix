@@ -3,6 +3,7 @@
 #include "nix/util/error.hh"
 #include "nix/util/pos-idx.hh"
 #include "nix/store/path.hh"
+#include "nix/expr/value.hh"
 
 namespace nix {
 
@@ -35,6 +36,15 @@ public:
     {
     }
 
+    /**
+     * For structured subclasses, which render their own message.
+     */
+    EvalBaseError(EvalState & state, ErrorInfo && errorInfo)
+        : CloneableError(NoHint{}, std::move(errorInfo))
+        , state(state)
+    {
+    }
+
     template<typename... Args>
     explicit EvalBaseError(EvalState & state, const std::string & formatString, const Args &... formatArgs)
         : CloneableError(formatString, formatArgs...)
@@ -52,11 +62,107 @@ public:
 MakeError(EvalError, EvalBaseError);
 MakeError(ParseError, UnstructuredError);
 MakeError(AssertionError, EvalError);
-MakeError(ThrownError, AssertionError);
-MakeError(Abort, EvalError);
 MakeError(TypeError, EvalError);
-MakeError(UndefinedVarError, EvalError);
-MakeError(MissingArgumentError, EvalError);
+
+/* The structured errors below each carry the facts of the matter as
+   fields, render their message from them, and expose them as JSON with a
+   `type` discriminator naming the kind of error. */
+
+/**
+ * `builtins.throw`.
+ */
+class ThrownError : public CloneableError<ThrownError, AssertionError>
+{
+    void anchor() override;
+
+public:
+    /**
+     * The message the expression threw.
+     */
+    std::string text;
+
+    ThrownError(EvalState & state, std::string text);
+
+    HintFmt renderMessage() const override;
+    std::optional<nlohmann::json> toJSON() const override;
+};
+
+/**
+ * `builtins.abort`.
+ */
+class Abort : public CloneableError<Abort, EvalError>
+{
+    void anchor() override;
+
+public:
+    /**
+     * The message the expression aborted with.
+     */
+    std::string text;
+
+    Abort(EvalState & state, std::string text);
+
+    HintFmt renderMessage() const override;
+    std::optional<nlohmann::json> toJSON() const override;
+};
+
+class UndefinedVarError : public CloneableError<UndefinedVarError, EvalError>
+{
+    void anchor() override;
+
+public:
+    std::string name;
+
+    UndefinedVarError(EvalState & state, std::string name);
+
+    HintFmt renderMessage() const override;
+    std::optional<nlohmann::json> toJSON() const override;
+};
+
+/**
+ * A function was evaluated as a top-level expression without a value
+ * for one of its arguments.
+ */
+class MissingArgumentError : public CloneableError<MissingArgumentError, EvalError>
+{
+    void anchor() override;
+
+public:
+    /**
+     * The argument that had no value.
+     */
+    std::string name;
+
+    MissingArgumentError(EvalState & state, std::string name);
+
+    HintFmt renderMessage() const override;
+    std::optional<nlohmann::json> toJSON() const override;
+};
+
+/**
+ * A value turned out to be of a different type than was needed.
+ */
+class UnexpectedTypeError : public CloneableError<UnexpectedTypeError, TypeError>
+{
+    void anchor() override;
+
+public:
+    ValueType expected;
+    ValueType found;
+    /**
+     * The offending value, printed plainly.
+     */
+    std::string value;
+    /**
+     * The same, printed for the terminal, for the message.
+     */
+    std::string valueForDisplay;
+
+    UnexpectedTypeError(EvalState & state, ValueType expected, const Value & v);
+
+    HintFmt renderMessage() const override;
+    std::optional<nlohmann::json> toJSON() const override;
+};
 
 class InfiniteRecursionError : public CloneableError<InfiniteRecursionError, EvalError>
 {
@@ -71,12 +177,10 @@ public:
      */
     const Value * const v;
 
-    template<typename... Args>
-    explicit InfiniteRecursionError(EvalState & state, const Value * v, const Args &... args)
-        : CloneableError(state, args...)
-        , v(v)
-    {
-    }
+    InfiniteRecursionError(EvalState & state, const Value * v);
+
+    HintFmt renderMessage() const override;
+    std::optional<nlohmann::json> toJSON() const override;
 };
 
 /**
@@ -89,10 +193,10 @@ class StackOverflowError : public CloneableError<StackOverflowError, EvalBaseErr
     void anchor() override;
 
 public:
-    StackOverflowError(EvalState & state)
-        : CloneableError(state, "stack overflow; max-call-depth exceeded")
-    {
-    }
+    StackOverflowError(EvalState & state);
+
+    HintFmt renderMessage() const override;
+    std::optional<nlohmann::json> toJSON() const override;
 };
 
 MakeError(IFDError, EvalBaseError);
