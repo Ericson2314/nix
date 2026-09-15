@@ -499,7 +499,19 @@ public:
     std::optional<std::string> response;
 
     template<typename... Args>
-    FileTransferError(FileTransfer::Error error, std::optional<std::string> response, Args &&... args);
+    FileTransferError(FileTransfer::Error error, std::optional<std::string> response, Args &&... args)
+        : CloneableError(HintFmt(std::forward<Args>(args)...))
+        , error(error)
+        , response(response)
+    {
+        // FIXME: Due to https://github.com/NixOS/nix/issues/3841 we don't know how
+        // to print different messages for different verbosity levels. For now
+        // we add some heuristics for detecting when we want to show the response.
+        if (response && (response->size() < 1024 || response->find("<html>") != std::string::npos))
+            hint = HintFmt("%1%\n\nresponse body:\n\n%2%", Uncolored(hint.str()), chomp(*response));
+    }
+
+    std::optional<nlohmann::json> toJSON() const override;
 };
 
 } // namespace nix

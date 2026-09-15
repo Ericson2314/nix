@@ -20,6 +20,8 @@ The first errors to expose their content are from the evaluator:
 values of the wrong type (`expected`, `found`, `value`), failed `assert`
 expressions (`expression`), infinite recursion, stack overflow, and
 invalid store paths (`path`). Build failures carry their `status` and
-whether the build was non-deterministic. The evaluator's own trace
+whether the build was non-deterministic. System errors carry the error
+`code`, its `category`, and the system's `message` for it; file transfer
+failures their `kind` and, when small, the `response` body. The evaluator's own trace
 frames carry data too: which builtin or function was being called, which
 attribute or file was being evaluated. More will follow.

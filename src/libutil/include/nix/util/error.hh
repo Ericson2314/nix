@@ -599,6 +599,8 @@ public:
     {
         return errorCode == e;
     }
+
+    std::optional<nlohmann::json> toJSON() const override;
 };
 
 /**

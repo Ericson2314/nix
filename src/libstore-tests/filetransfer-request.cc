@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include "nix/store/filetransfer.hh"
 
@@ -14,6 +15,18 @@ TEST(FileTransferRequest, displayUriStripsUserinfo)
 
     FileTransferRequest plain(VerbatimURL{std::string{"https://example.org/file"}});
     EXPECT_EQ(plain.displayUri(), "https://example.org/file");
+}
+
+TEST(FileTransferError, toJSON)
+{
+    FileTransferError e(FileTransfer::NotFound, std::nullopt, "unable to download '%s'", "http://example.org");
+    EXPECT_EQ(e.toJSON(), (nlohmann::json{{"type", "file-transfer"}, {"kind", "not-found"}}));
+
+    FileTransferError withBody(
+        FileTransfer::Misc, "<html>gone</html>", "unable to download '%s'", "http://example.org");
+    EXPECT_EQ(
+        withBody.toJSON(),
+        (nlohmann::json{{"type", "file-transfer"}, {"kind", "misc"}, {"response", "<html>gone</html>"}}));
 }
 
 } // namespace nix

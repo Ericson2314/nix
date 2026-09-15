@@ -612,4 +612,15 @@ TEST(logEx, unstructuredErrorHasNoStructuredField)
 
 } // namespace
 
+TEST(SystemError, toJSON)
+{
+    SysError e(ENOENT, "opening %s", "puppies");
+    auto j = e.toJSON();
+    ASSERT_TRUE(j);
+    EXPECT_EQ((*j)["type"], "system");
+    EXPECT_EQ((*j)["category"], "generic");
+    EXPECT_EQ((*j)["code"], ENOENT);
+    EXPECT_EQ((*j)["message"], strerror(ENOENT));
+}
+
 } // namespace nix

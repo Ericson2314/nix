@@ -42,6 +42,16 @@ void UnimplementedError::anchor() {}
 
 void SystemError::anchor() {}
 
+std::optional<nlohmann::json> SystemError::toJSON() const
+{
+    return nlohmann::json{
+        {"type", "system"},
+        {"category", errorCode.category().name()},
+        {"code", errorCode.value()},
+        {"message", errorDetails},
+    };
+}
+
 void SysError::anchor() {}
 
 void BaseError::addTrace(std::shared_ptr<const Pos> && e, HintFmt hint, TracePrint print)

@@ -22,6 +22,7 @@
 #include <fcntl.h>
 
 #include <curl/curl.h>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <array>
@@ -1471,17 +1472,36 @@ void FileTransfer::download(
 
 void FileTransferError::anchor() {}
 
-template<typename... Args>
-FileTransferError::FileTransferError(FileTransfer::Error error, std::optional<std::string> response, Args &&... args)
-    : CloneableError(HintFmt(std::forward<Args>(args)...))
-    , error(error)
-    , response(response)
+} // namespace nix
+
+namespace nix {
+
+static std::string_view fileTransferErrorName(FileTransfer::Error error)
 {
-    // FIXME: Due to https://github.com/NixOS/nix/issues/3841 we don't know how
-    // to print different messages for different verbosity levels. For now
-    // we add some heuristics for detecting when we want to show the response.
-    if (response && (response->size() < 1024 || response->find("<html>") != std::string::npos))
-        hint = HintFmt("%1%\n\nresponse body:\n\n%2%", Uncolored(hint.str()), chomp(*response));
+    switch (error) {
+    case FileTransfer::NotFound:
+        return "not-found";
+    case FileTransfer::Unauthorized:
+        return "unauthorized";
+    case FileTransfer::Forbidden:
+        return "forbidden";
+    case FileTransfer::Misc:
+        return "misc";
+    case FileTransfer::Transient:
+        return "transient";
+    }
+    unreachable();
+}
+
+std::optional<nlohmann::json> FileTransferError::toJSON() const
+{
+    nlohmann::json j{
+        {"type", "file-transfer"},
+        {"kind", fileTransferErrorName(error)},
+    };
+    if (response)
+        j["response"] = *response;
+    return j;
 }
 
 } // namespace nix
