@@ -40,6 +40,17 @@ void BaseError::addTrace(std::shared_ptr<const Pos> && e, HintFmt hint, TracePri
     err.traces.push_front(Trace{.pos = std::move(e), .hint = hint, .print = print});
 }
 
+void BaseError::addTrace(std::shared_ptr<const Pos> && e, HintFmt hint, nlohmann::json data, TracePrint print)
+{
+    err.traces.push_front(
+        Trace{
+            .pos = std::move(e),
+            .hint = hint,
+            .print = print,
+            .data = std::make_shared<const nlohmann::json>(std::move(data)),
+        });
+}
+
 void throwExceptionSelfCheck()
 {
     // This is meant to be caught in initLibUtil()

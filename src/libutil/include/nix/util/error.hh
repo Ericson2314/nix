@@ -110,6 +110,12 @@ struct Trace
     std::shared_ptr<const Pos> pos;
     HintFmt hint;
     TracePrint print = TracePrint::Default;
+    /**
+     * The structured content of this frame, if it has any, for the same
+     * purpose as `BaseError::toJSON`: so that a machine reader gets the
+     * facts and not just the rendered `hint`.
+     */
+    std::shared_ptr<const nlohmann::json> data;
 };
 
 inline std::strong_ordering operator<=>(const Trace & lhs, const Trace & rhs);
@@ -299,6 +305,13 @@ public:
      * @param print Optional, whether to always print (used by `addErrorContext`)
      */
     void addTrace(std::shared_ptr<const Pos> && pos, HintFmt hint, TracePrint print = TracePrint::Default);
+
+    /**
+     * Prepends an item to the error trace, with structured content as
+     * well as the rendered hint. See `Trace::data`.
+     */
+    void addTrace(
+        std::shared_ptr<const Pos> && pos, HintFmt hint, nlohmann::json data, TracePrint print = TracePrint::Default);
 
     bool hasTrace() const
     {

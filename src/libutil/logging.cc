@@ -308,6 +308,8 @@ struct JSONLogger : Logger
             for (auto iter = ei.traces.rbegin(); iter != ei.traces.rend(); ++iter) {
                 nlohmann::json stackFrame;
                 stackFrame["raw_msg"] = iter->hint.str();
+                if (iter->data)
+                    stackFrame["structured"] = *iter->data;
                 to_json(stackFrame, iter->pos);
                 traces.push_back(stackFrame);
             }

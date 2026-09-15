@@ -572,7 +572,14 @@ TEST(logEx, structuredErrorReachesJSONLogger)
     Finally restoreLogger([oldLogger = logger] { logger = oldLogger; });
     logger = jsonLogger.get();
 
-    logExError(StructuredTestError("puppies", 3));
+    bool oldShowTrace = loggerSettings.showTrace.get();
+    loggerSettings.showTrace.assign(true);
+    Finally restoreShowTrace([oldShowTrace] { loggerSettings.showTrace.assign(oldShowTrace); });
+
+    StructuredTestError e("puppies", 3);
+    e.addTrace(nullptr, HintFmt("while counting %s", "puppies"), nlohmann::json{{"counting", "puppies"}});
+    e.addTrace(nullptr, HintFmt("while %s", "unstructured"));
+    logExError(e);
 
     lseek(tempFile.get(), 0, SEEK_SET);
     auto record = nlohmann::json::parse(readFile(tempFile.get()));
@@ -580,6 +587,10 @@ TEST(logEx, structuredErrorReachesJSONLogger)
     EXPECT_EQ(record["action"], "msg");
     EXPECT_EQ(record["level"], lvlError);
     EXPECT_EQ(record["structured"], (nlohmann::json{{"what", "puppies"}, {"howMany", 3}}));
+    /* Frames are emitted innermost first, i.e. in the order they were added. */
+    ASSERT_EQ(record["trace"].size(), 2u);
+    EXPECT_EQ(record["trace"][0]["structured"], (nlohmann::json{{"counting", "puppies"}}));
+    EXPECT_FALSE(record["trace"][1].contains("structured"));
     /* The message is still there for readers that don't know the fields. */
     EXPECT_EQ(filterANSIEscapes(record["raw_msg"].get<std::string>(), true), "3 of puppies");
 }
