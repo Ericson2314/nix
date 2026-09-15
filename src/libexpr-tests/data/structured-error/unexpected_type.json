@@ -1,6 +1,6 @@
 {
-  "type": "unexpected-type",
   "expected": "set",
   "found": "integer",
+  "type": "unexpected-type",
   "value": "1"
 }

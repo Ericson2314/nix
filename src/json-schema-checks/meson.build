@@ -243,27 +243,45 @@ schemas += [
 # Structured errors and their trace frames
 schemas += [
   {
-    'stem' : 'structured-error',
+    'stem' : 'structured-error-expr',
     'schema' : schema_dir / 'error-v1.yaml',
     'files' : [
       'throw.json',
-      'undefined-variable.json',
-      'unexpected-type.json',
-      'assertion-failed.json',
-      'build-failure.json',
+      'abort.json',
+      'undefined_variable.json',
+      'unexpected_type.json',
+      'assertion_failed.json',
+      'infinite_recursion.json',
+    ],
+  },
+  {
+    'stem' : 'structured-error-store',
+    'schema' : schema_dir / 'error-v1.yaml',
+    'files' : [
+      'build_failure.json',
+      'file_transfer.json',
+      'file_transfer_with_response.json',
+    ],
+  },
+  {
+    'stem' : 'structured-error-util',
+    'schema' : schema_dir / 'error-v1.yaml',
+    'files' : [
       'system.json',
-      'file-transfer.json',
     ],
   },
   {
     'stem' : 'trace-frame',
     'schema' : schema_dir / 'trace-frame-v1.yaml',
     'files' : [
-      'calling-builtin.json',
-      'calling-function.json',
-      'evaluating-builtin-argument.json',
-      'evaluating-operand.json',
-      'evaluating-attribute.json',
+      'calling_builtin.json',
+      'calling_function.json',
+      'calling_anonymous_function.json',
+      'call_site.json',
+      'evaluating_attribute.json',
+      'evaluating_builtin_argument.json',
+      'evaluating_operand.json',
+      'evaluating_assertion_condition.json',
     ],
   },
 ]

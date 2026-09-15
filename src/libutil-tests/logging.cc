@@ -1,5 +1,6 @@
 #include "nix/util/logging.hh"
 #include "nix/util/tests/characterization.hh"
+#include "nix/util/tests/json-characterization.hh"
 #include "nix/util/serialise.hh"
 #include "nix/util/tests/capture-logging.hh"
 #include "nix/util/file-system.hh"
@@ -612,15 +613,18 @@ TEST(logEx, unstructuredErrorHasNoStructuredField)
 
 } // namespace
 
-TEST(SystemError, toJSON)
+class SystemErrorJsonTest : public virtual CharacterizationTest
+{
+    std::filesystem::path goldenMaster(std::string_view testStem) const override
+    {
+        return getUnitTestData() / "structured-error" / testStem;
+    }
+};
+
+TEST_F(SystemErrorJsonTest, system)
 {
     SysError e(ENOENT, "opening %s", "puppies");
-    auto j = e.toJSON();
-    ASSERT_TRUE(j);
-    EXPECT_EQ((*j)["type"], "system");
-    EXPECT_EQ((*j)["category"], "generic");
-    EXPECT_EQ((*j)["code"], ENOENT);
-    EXPECT_EQ((*j)["message"], strerror(ENOENT));
+    writeJsonTest(*this, "system", *e.toJSON());
 }
 
 } // namespace nix

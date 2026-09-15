@@ -5,17 +5,17 @@
 ### Calling a builtin
 
 ```json
-{{#include schema/trace-frame-v1/calling-builtin.json}}
+{{#include schema/trace-frame-v1/calling_builtin.json}}
 ```
 
 ### Evaluating an argument of a builtin
 
 ```json
-{{#include schema/trace-frame-v1/evaluating-builtin-argument.json}}
+{{#include schema/trace-frame-v1/evaluating_builtin_argument.json}}
 ```
 
 ### Evaluating an operand
 
 ```json
-{{#include schema/trace-frame-v1/evaluating-operand.json}}
+{{#include schema/trace-frame-v1/evaluating_operand.json}}
 ```

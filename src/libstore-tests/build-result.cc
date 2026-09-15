@@ -93,20 +93,22 @@ INSTANTIATE_TEST_SUITE_P(
             },
         }));
 
-TEST(BuildError, toJSON)
+class BuildErrorJsonTest : public virtual CharacterizationTest
+{
+    std::filesystem::path goldenMaster(std::string_view testStem) const override
+    {
+        return getUnitTestData() / "structured-error" / testStem;
+    }
+};
+
+TEST_F(BuildErrorJsonTest, build_failure)
 {
     BuildError e({
         .status = BuildResult::Failure::NotDeterministic,
         .msg = HintFmt("no idea why"),
         .isNonDeterministic = true,
     });
-    EXPECT_EQ(
-        e.toJSON(),
-        (nlohmann::json{
-            {"type", "build-failure"},
-            {"status", "NotDeterministic"},
-            {"isNonDeterministic", true},
-        }));
+    writeJsonTest(*this, "build_failure", *e.toJSON());
 }
 
 } // namespace nix

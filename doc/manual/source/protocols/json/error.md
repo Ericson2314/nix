@@ -11,17 +11,17 @@
 ### A value of the wrong type
 
 ```json
-{{#include schema/error-v1/unexpected-type.json}}
+{{#include schema/error-v1/unexpected_type.json}}
 ```
 
 ### A failed build
 
 ```json
-{{#include schema/error-v1/build-failure.json}}
+{{#include schema/error-v1-store/build_failure.json}}
 ```
 
 ### A system error
 
 ```json
-{{#include schema/error-v1/system.json}}
+{{#include schema/error-v1-util/system.json}}
 ```

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "nix/util/tests/json-characterization.hh"
 #include <nlohmann/json.hpp>
 
 #include "nix/store/filetransfer.hh"
@@ -17,16 +18,24 @@ TEST(FileTransferRequest, displayUriStripsUserinfo)
     EXPECT_EQ(plain.displayUri(), "https://example.org/file");
 }
 
-TEST(FileTransferError, toJSON)
+class FileTransferErrorJsonTest : public virtual CharacterizationTest
+{
+    std::filesystem::path goldenMaster(std::string_view testStem) const override
+    {
+        return getUnitTestData() / "structured-error" / testStem;
+    }
+};
+
+TEST_F(FileTransferErrorJsonTest, file_transfer)
 {
     FileTransferError e(FileTransfer::NotFound, std::nullopt, "unable to download '%s'", "http://example.org");
-    EXPECT_EQ(e.toJSON(), (nlohmann::json{{"type", "file-transfer"}, {"kind", "not-found"}}));
+    writeJsonTest(*this, "file_transfer", *e.toJSON());
+}
 
-    FileTransferError withBody(
-        FileTransfer::Misc, "<html>gone</html>", "unable to download '%s'", "http://example.org");
-    EXPECT_EQ(
-        withBody.toJSON(),
-        (nlohmann::json{{"type", "file-transfer"}, {"kind", "misc"}, {"response", "<html>gone</html>"}}));
+TEST_F(FileTransferErrorJsonTest, file_transfer_with_response)
+{
+    FileTransferError e(FileTransfer::Misc, "<html>gone</html>", "unable to download '%s'", "http://example.org");
+    writeJsonTest(*this, "file_transfer_with_response", *e.toJSON());
 }
 
 } // namespace nix

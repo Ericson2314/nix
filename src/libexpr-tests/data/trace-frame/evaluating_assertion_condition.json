@@ -1,0 +1,4 @@
+{
+  "expression": "(1 == 2)",
+  "type": "evaluating-assertion-condition"
+}

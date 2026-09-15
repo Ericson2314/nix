@@ -3,6 +3,7 @@
 
 #include "nix/expr/tests/libexpr.hh"
 #include "nix/util/finally.hh"
+#include "nix/util/tests/json-characterization.hh"
 
 #include <nlohmann/json.hpp>
 
@@ -57,71 +58,74 @@ TEST_F(ErrorTraceTest, NestedThrows)
     }
 }
 
-class StructuredErrorTest : public LibExprTest
+/**
+ * The JSON of structured errors and trace frames, as golden files that
+ * double as the examples in the manual and are checked against the JSON
+ * schemas there.
+ */
+class StructuredErrorTest : public LibExprTest, public virtual CharacterizationTest
 {
 protected:
+    std::filesystem::path goldenMaster(std::string_view testStem) const override
+    {
+        return getUnitTestData() / "structured-error" / testStem;
+    }
+
     /**
      * Evaluate `input`, which must fail, and return the failure's JSON.
      */
-    std::optional<nlohmann::json> failureJSON(std::string input)
+    nlohmann::json failureJSON(std::string input)
     {
         try {
             eval(input);
         } catch (Error & e) {
-            return e.toJSON();
+            auto j = e.toJSON();
+            if (!j)
+                ADD_FAILURE() << "expected '" << input << "' to fail with a structured error";
+            return j.value_or(nullptr);
         }
         ADD_FAILURE() << "expected '" << input << "' to fail";
-        return std::nullopt;
+        return nullptr;
     }
 };
 
-TEST_F(StructuredErrorTest, undefinedVariable)
-{
-    EXPECT_EQ(failureJSON("puppy"), (nlohmann::json{{"type", "undefined-variable"}, {"name", "puppy"}}));
-}
+#define STRUCTURED_ERROR_TEST(name, input)               \
+    TEST_F(StructuredErrorTest, name)                    \
+    {                                                    \
+        writeJsonTest(*this, #name, failureJSON(input)); \
+    }
 
-TEST_F(StructuredErrorTest, thrown)
-{
-    EXPECT_EQ(failureJSON("builtins.throw \"boom\""), (nlohmann::json{{"type", "throw"}, {"message", "boom"}}));
-}
-
-TEST_F(StructuredErrorTest, abort)
-{
-    EXPECT_EQ(failureJSON("builtins.abort \"boom\""), (nlohmann::json{{"type", "abort"}, {"message", "boom"}}));
-}
-
-TEST_F(StructuredErrorTest, unexpectedType)
-{
-    EXPECT_EQ(
-        failureJSON("builtins.attrNames 1"),
-        (nlohmann::json{{"type", "unexpected-type"}, {"expected", "set"}, {"found", "integer"}, {"value", "1"}}));
-}
-
-TEST_F(StructuredErrorTest, assertFailed)
-{
-    EXPECT_EQ(
-        failureJSON("assert false; true"), (nlohmann::json{{"type", "assertion-failed"}, {"expression", "false"}}));
-}
-
-TEST_F(StructuredErrorTest, infiniteRecursion)
-{
-    EXPECT_EQ(failureJSON("let x = x; in x"), (nlohmann::json{{"type", "infinite-recursion"}}));
-}
+STRUCTURED_ERROR_TEST(throw, "builtins.throw \"boom\"")
+STRUCTURED_ERROR_TEST(abort, "builtins.abort \"boom\"")
+STRUCTURED_ERROR_TEST(undefined_variable, "puppy")
+STRUCTURED_ERROR_TEST(unexpected_type, "builtins.attrNames 1")
+STRUCTURED_ERROR_TEST(assertion_failed, "assert false; true")
+STRUCTURED_ERROR_TEST(infinite_recursion, "let x = x; in x")
 
 TEST_F(StructuredErrorTest, unstructuredHasNone)
 {
-    EXPECT_EQ(failureJSON("builtins.baseNameOf 1 2"), std::nullopt);
+    try {
+        eval("builtins.baseNameOf 1 2");
+    } catch (Error & e) {
+        EXPECT_EQ(e.toJSON(), std::nullopt);
+        return;
+    }
+    ADD_FAILURE() << "expected a failure";
 }
 
-class StructuredTraceTest : public LibExprTest
+class StructuredTraceTest : public LibExprTest, public virtual CharacterizationTest
 {
 protected:
+    std::filesystem::path goldenMaster(std::string_view testStem) const override
+    {
+        return getUnitTestData() / "trace-frame" / testStem;
+    }
+
     /**
      * Evaluate `input`, which must fail, and return the structured data
-     * of its trace frames, innermost first, with `null` for frames that
-     * have none.
+     * of the first trace frame of the given `type`.
      */
-    nlohmann::json failureFrames(std::string input)
+    nlohmann::json frameOfType(std::string input, std::string_view type)
     {
         bool oldShowTrace = loggerSettings.showTrace.get();
         loggerSettings.showTrace.assign(true);
@@ -129,46 +133,30 @@ protected:
         try {
             eval(input);
         } catch (Error & e) {
-            auto frames = nlohmann::json::array();
             for (auto & trace : e.info().traces)
-                frames.push_back(trace.data ? *trace.data : nlohmann::json());
-            return frames;
+                if (trace.data && (*trace.data)["type"] == type)
+                    return *trace.data;
+            ADD_FAILURE() << "no frame of type '" << type << "' in the failure of '" << input << "'";
+            return nullptr;
         }
         ADD_FAILURE() << "expected '" << input << "' to fail";
         return nullptr;
     }
 };
 
-TEST_F(StructuredTraceTest, callingBuiltin)
-{
-    auto frames = failureFrames("builtins.length (builtins.attrNames 1)");
-    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "calling-builtin"}, {"name", "attrNames"}}));
-    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "calling-builtin"}, {"name", "length"}}));
-}
+#define STRUCTURED_TRACE_TEST(name, input, type)               \
+    TEST_F(StructuredTraceTest, name)                          \
+    {                                                          \
+        writeJsonTest(*this, #name, frameOfType(input, type)); \
+    }
 
-TEST_F(StructuredTraceTest, builtinArgument)
-{
-    auto frames = failureFrames("builtins.length 1");
-    EXPECT_THAT(
-        frames,
-        testing::Contains(
-            nlohmann::json{{"type", "evaluating-builtin-argument"}, {"builtin", "length"}, {"argument", 1}}));
-}
+STRUCTURED_TRACE_TEST(calling_builtin, "builtins.length (builtins.attrNames 1)", "calling-builtin")
+STRUCTURED_TRACE_TEST(calling_function, "let f = x: x.a; in f 1", "calling-function")
+STRUCTURED_TRACE_TEST(calling_anonymous_function, "(x: x.a) 1", "calling-function")
+STRUCTURED_TRACE_TEST(call_site, "let f = x: x.a; in f 1", "call-site")
+STRUCTURED_TRACE_TEST(evaluating_attribute, "{ a = { b = builtins.throw \"x\"; }; }.a.b", "evaluating-attribute")
+STRUCTURED_TRACE_TEST(evaluating_builtin_argument, "builtins.length 1", "evaluating-builtin-argument")
+STRUCTURED_TRACE_TEST(evaluating_operand, "true && 1", "evaluating-operand")
+STRUCTURED_TRACE_TEST(evaluating_assertion_condition, "assert 1 == 2; true", "evaluating-assertion-condition")
 
-TEST_F(StructuredTraceTest, operand)
-{
-    auto frames = failureFrames("true && 1");
-    EXPECT_THAT(
-        frames,
-        testing::Contains(nlohmann::json{{"type", "evaluating-operand"}, {"operator", "&&"}, {"side", "right"}}));
-}
-
-TEST_F(StructuredTraceTest, callingFunctionAndAttribute)
-{
-    auto frames = failureFrames("let f = x: x.a; in { a = f 1; }.a");
-    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "calling-function"}, {"name", "f"}}));
-    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "call-site"}}));
-    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "evaluating-attribute"}, {"attribute", "a"}}));
-}
-
-} /* namespace nix */
+} // namespace nix

@@ -1,6 +1,6 @@
 {
-  "type": "system",
   "category": "generic",
   "code": 2,
-  "message": "No such file or directory"
+  "message": "No such file or directory",
+  "type": "system"
 }
