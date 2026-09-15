@@ -123,14 +123,14 @@ void EvalState::forceValue(Value & v, const PosIdx pos)
 }
 
 [[gnu::always_inline]]
-inline void EvalState::forceAttrs(Value & v, const PosIdx pos, std::string_view errorCtx)
+inline void EvalState::forceAttrs(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     forceAttrs(v, [&]() { return pos; }, errorCtx);
 }
 
 template<typename Callable>
 [[gnu::always_inline]]
-inline void EvalState::forceAttrs(Value & v, Callable getPos, std::string_view errorCtx)
+inline void EvalState::forceAttrs(Value & v, Callable getPos, const TraceContext & errorCtx)
 {
     PosIdx pos = getPos();
     forceValue(v, pos);
@@ -140,7 +140,7 @@ inline void EvalState::forceAttrs(Value & v, Callable getPos, std::string_view e
 }
 
 [[gnu::always_inline]]
-inline void EvalState::forceList(Value & v, const PosIdx pos, std::string_view errorCtx)
+inline void EvalState::forceList(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     forceValue(v, pos);
     if (!v.isList()) {

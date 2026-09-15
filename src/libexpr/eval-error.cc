@@ -190,9 +190,9 @@ EvalErrorBuilder<T> & EvalErrorBuilder<T>::atPos(Value & value, PosIdx fallback)
 }
 
 template<class T>
-EvalErrorBuilder<T> & EvalErrorBuilder<T>::withTrace(PosIdx pos, const std::string_view text)
+EvalErrorBuilder<T> & EvalErrorBuilder<T>::withTrace(PosIdx pos, const TraceContext & ctx)
 {
-    error.addTrace(error.state.positions[pos], text);
+    error.addTrace(error.state.positions[pos], ctx);
     return *this;
 }
 

@@ -40,7 +40,7 @@ ref<InstallableValue> InstallableValue::require(ref<Installable> installable)
 }
 
 std::optional<DerivedPathWithInfo>
-InstallableValue::trySinglePathToDerivedPaths(Value & v, const PosIdx pos, std::string_view errorCtx)
+InstallableValue::trySinglePathToDerivedPaths(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     if (v.type() == nPath) {
         auto storePath = fetchToStore(state->fetchSettings, *state->store, v.path(), FetchMode::Copy);

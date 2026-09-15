@@ -313,6 +313,24 @@ public:
     void addTrace(
         std::shared_ptr<const Pos> && pos, HintFmt hint, nlohmann::json data, TracePrint print = TracePrint::Default);
 
+    /**
+     * Prepends an item to the error trace from anything that can render a
+     * hint and, optionally, structured data for it, such as the
+     * evaluator's `TraceContext`.
+     */
+    template<typename Ctx>
+        requires requires(const Ctx & c) {
+            { c.hint() } -> std::convertible_to<HintFmt>;
+            { c.data() } -> std::convertible_to<std::optional<nlohmann::json>>;
+        }
+    void addTrace(std::shared_ptr<const Pos> && pos, const Ctx & ctx)
+    {
+        if (auto data = ctx.data())
+            addTrace(std::move(pos), ctx.hint(), std::move(*data));
+        else
+            addTrace(std::move(pos), ctx.hint());
+    }
+
     bool hasTrace() const
     {
         return !err.traces.empty();

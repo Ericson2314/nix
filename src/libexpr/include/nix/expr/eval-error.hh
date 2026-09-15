@@ -4,6 +4,7 @@
 #include "nix/util/pos-idx.hh"
 #include "nix/store/path.hh"
 #include "nix/expr/value.hh"
+#include "nix/expr/trace-context.hh"
 
 namespace nix {
 
@@ -265,7 +266,7 @@ public:
 
     [[nodiscard, gnu::noinline]] EvalErrorBuilder<T> & atPos(Value & value, PosIdx fallback = noPos);
 
-    [[nodiscard, gnu::noinline]] EvalErrorBuilder<T> & withTrace(PosIdx pos, const std::string_view text);
+    [[nodiscard, gnu::noinline]] EvalErrorBuilder<T> & withTrace(PosIdx pos, const TraceContext & ctx);
 
     [[nodiscard, gnu::noinline]] EvalErrorBuilder<T> & withFrameTrace(PosIdx pos, const std::string_view text);
 

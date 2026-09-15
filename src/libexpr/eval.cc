@@ -1213,7 +1213,7 @@ void EvalState::eval(Expr * e, Value & v)
     e->eval(*this, baseEnv, v);
 }
 
-inline bool EvalState::evalBool(Env & env, Expr * e, std::string_view errorCtx)
+inline bool EvalState::evalBool(Env & env, Expr * e, const TraceContext & errorCtx)
 {
     PosIdx pos = e->getPos();
     try {
@@ -1228,7 +1228,7 @@ inline bool EvalState::evalBool(Env & env, Expr * e, std::string_view errorCtx)
     }
 }
 
-inline void EvalState::evalAttrs(Env & env, Expr * e, Value & v, std::string_view errorCtx)
+inline void EvalState::evalAttrs(Env & env, Expr * e, Value & v, const TraceContext & errorCtx)
 {
     PosIdx pos = e->getPos();
     try {
@@ -1241,7 +1241,7 @@ inline void EvalState::evalAttrs(Env & env, Expr * e, Value & v, std::string_vie
     }
 }
 
-void Expr::eval(EvalState & state, Env & env, Value & v, std::string_view errorCtx)
+void Expr::eval(EvalState & state, Env & env, Value & v, const TraceContext & errorCtx)
 {
     try {
         eval(state, env, v);
@@ -2091,7 +2091,7 @@ void ExprOpUpdate::eval(EvalState & state, Env & env, Value & v)
     v = vTmp;
 }
 
-void Expr::evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, std::string_view errorCtx)
+void Expr::evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, const TraceContext & errorCtx)
 {
     Value v;
     state.evalAttrs(env, this, v, errorCtx);
@@ -2106,7 +2106,7 @@ void ExprOpUpdate::evalForUpdate(EvalState & state, Env & env, UpdateQueue & q)
     e1->evalForUpdate(state, env, q, "in the left operand of '//'");
 }
 
-void ExprOpUpdate::evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, std::string_view errorCtx)
+void ExprOpUpdate::evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, const TraceContext & errorCtx)
 {
     evalForUpdate(state, env, q);
 }
@@ -2121,7 +2121,7 @@ void ExprOpConcatLists::eval(EvalState & state, Env & env, Value & v)
     state.concatLists(v, lists, pos, "while evaluating one of the elements to concatenate");
 }
 
-void EvalState::concatLists(Value & v, std::span<Value * const> lists, const PosIdx pos, std::string_view errorCtx)
+void EvalState::concatLists(Value & v, std::span<Value * const> lists, const PosIdx pos, const TraceContext & errorCtx)
 {
     nrListConcats++;
 
@@ -2399,7 +2399,7 @@ void EvalState::forceValueDeep(Value & v)
     }(v);
 }
 
-NixInt EvalState::forceInt(Value & v, const PosIdx pos, std::string_view errorCtx)
+NixInt EvalState::forceInt(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     try {
         forceValue(v, pos);
@@ -2414,7 +2414,7 @@ NixInt EvalState::forceInt(Value & v, const PosIdx pos, std::string_view errorCt
     return v.integer();
 }
 
-NixFloat EvalState::forceFloat(Value & v, const PosIdx pos, std::string_view errorCtx)
+NixFloat EvalState::forceFloat(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     try {
         forceValue(v, pos);
@@ -2429,7 +2429,7 @@ NixFloat EvalState::forceFloat(Value & v, const PosIdx pos, std::string_view err
     }
 }
 
-bool EvalState::forceBool(Value & v, const PosIdx pos, std::string_view errorCtx)
+bool EvalState::forceBool(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     try {
         forceValue(v, pos);
@@ -2444,7 +2444,7 @@ bool EvalState::forceBool(Value & v, const PosIdx pos, std::string_view errorCtx
     return v.boolean();
 }
 
-const Attr * EvalState::getAttr(Symbol attrSym, const Bindings * attrSet, std::string_view errorCtx)
+const Attr * EvalState::getAttr(Symbol attrSym, const Bindings * attrSet, const TraceContext & errorCtx)
 {
     auto value = attrSet->get(attrSym);
     if (!value) {
@@ -2458,7 +2458,7 @@ bool EvalState::isFunctor(const Value & fun) const
     return fun.type() == nAttrs && fun.attrs()->get(s.functor);
 }
 
-void EvalState::forceFunction(Value & v, const PosIdx pos, std::string_view errorCtx)
+void EvalState::forceFunction(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     try {
         forceValue(v, pos);
@@ -2470,7 +2470,7 @@ void EvalState::forceFunction(Value & v, const PosIdx pos, std::string_view erro
     }
 }
 
-std::string_view EvalState::forceString(Value & v, const PosIdx pos, std::string_view errorCtx)
+std::string_view EvalState::forceString(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     try {
         forceValue(v, pos);
@@ -2494,7 +2494,7 @@ std::string_view EvalState::forceString(
     Value & v,
     NixStringContext & context,
     const PosIdx pos,
-    std::string_view errorCtx,
+    const TraceContext & errorCtx,
     const ExperimentalFeatureSettings & xpSettings)
 {
     auto s = forceString(v, pos, errorCtx);
@@ -2502,7 +2502,7 @@ std::string_view EvalState::forceString(
     return s;
 }
 
-std::string_view EvalState::forceStringNoCtx(Value & v, const PosIdx pos, std::string_view errorCtx)
+std::string_view EvalState::forceStringNoCtx(Value & v, const PosIdx pos, const TraceContext & errorCtx)
 {
     auto s = forceString(v, pos, errorCtx);
     if (v.context()) {
@@ -2534,7 +2534,7 @@ BackedStringView EvalState::coerceToString(
     const PosIdx pos,
     Value & v,
     NixStringContext & context,
-    std::string_view errorCtx,
+    const TraceContext & errorCtx,
     bool coerceMore,
     bool copyToStore,
     bool canonicalizePath)
@@ -2662,7 +2662,8 @@ StorePath EvalState::copyPathToStore(NixStringContext & context, const SourcePat
     return dstPath;
 }
 
-SourcePath EvalState::coerceToPath(const PosIdx pos, Value & v, NixStringContext & context, std::string_view errorCtx)
+SourcePath
+EvalState::coerceToPath(const PosIdx pos, Value & v, NixStringContext & context, const TraceContext & errorCtx)
 {
     return peelToStringOutPath(
         pos,
@@ -2682,7 +2683,7 @@ SourcePath EvalState::coerceToPath(const PosIdx pos, Value & v, NixStringContext
 }
 
 StorePath
-EvalState::coerceToStorePath(const PosIdx pos, Value & v, NixStringContext & context, std::string_view errorCtx)
+EvalState::coerceToStorePath(const PosIdx pos, Value & v, NixStringContext & context, const TraceContext & errorCtx)
 {
     auto path = coerceToString(pos, v, context, errorCtx, false, false, true).toOwned();
     if (auto storePath = store->maybeParseStorePath(path))
@@ -2691,7 +2692,7 @@ EvalState::coerceToStorePath(const PosIdx pos, Value & v, NixStringContext & con
 }
 
 std::pair<SingleDerivedPath, std::string_view> EvalState::coerceToSingleDerivedPathUnchecked(
-    const PosIdx pos, Value & v, std::string_view errorCtx, const ExperimentalFeatureSettings & xpSettings)
+    const PosIdx pos, Value & v, const TraceContext & errorCtx, const ExperimentalFeatureSettings & xpSettings)
 {
     NixStringContext context;
     auto s = forceString(v, context, pos, errorCtx, xpSettings);
@@ -2719,7 +2720,7 @@ std::pair<SingleDerivedPath, std::string_view> EvalState::coerceToSingleDerivedP
     };
 }
 
-SingleDerivedPath EvalState::coerceToSingleDerivedPath(const PosIdx pos, Value & v, std::string_view errorCtx)
+SingleDerivedPath EvalState::coerceToSingleDerivedPath(const PosIdx pos, Value & v, const TraceContext & errorCtx)
 {
     auto [derivedPath, s_] = coerceToSingleDerivedPathUnchecked(pos, v, errorCtx);
     auto s = s_;
@@ -2752,7 +2753,7 @@ SingleDerivedPath EvalState::coerceToSingleDerivedPath(const PosIdx pos, Value &
 // NOTE: This implementation must match eqValues!
 // We accept this burden because informative error messages for
 // `assert a == b; x` are critical for our users' testing UX.
-void EvalState::assertEqValues(Value & v1, Value & v2, const PosIdx pos, std::string_view errorCtx)
+void EvalState::assertEqValues(Value & v1, Value & v2, const PosIdx pos, const TraceContext & errorCtx)
 {
     auto _level = addCallDepth(pos);
 
@@ -2963,7 +2964,7 @@ void EvalState::assertEqValues(Value & v1, Value & v2, const PosIdx pos, std::st
 }
 
 // This implementation must match assertEqValues
-bool EvalState::eqValues(Value & v1, Value & v2, const PosIdx pos, std::string_view errorCtx)
+bool EvalState::eqValues(Value & v1, Value & v2, const PosIdx pos, const TraceContext & errorCtx)
 {
     auto _level = addCallDepth(pos);
 

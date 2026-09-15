@@ -167,6 +167,7 @@ sources = files(
   'print.cc',
   'register-library-versions.cc',
   'search-path.cc',
+  'trace-context.cc',
   'value-to-json.cc',
   'value-to-xml.cc',
   'value.cc',

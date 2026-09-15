@@ -12,6 +12,7 @@
 #include "nix/expr/value.hh"
 #include "nix/expr/symbol-table.hh"
 #include "nix/expr/eval-error.hh"
+#include "nix/expr/trace-context.hh"
 #include "nix/expr/static-string-data.hh"
 #include "nix/util/pos-idx.hh"
 #include "nix/expr/counter.hh"
@@ -118,7 +119,7 @@ struct Expr
     virtual void eval(EvalState & state, Env & env, Value & v);
 
     /** Wrapper around the above that adds errorCtx to any thrown errors. */
-    void eval(EvalState & state, Env & env, Value & v, std::string_view errorCtx);
+    void eval(EvalState & state, Env & env, Value & v, const TraceContext & errorCtx);
 
     /**
      * Create a thunk for the delayed computation of the given expression
@@ -134,7 +135,7 @@ struct Expr
      * This allows the expression to perform multiple updates in a delayed manner, gathering up all the updates before
      * applying them.
      */
-    virtual void evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, std::string_view errorCtx);
+    virtual void evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, const TraceContext & errorCtx);
     virtual void setName(Symbol name);
     virtual void setDocComment(DocComment docComment) {};
 
@@ -763,7 +764,7 @@ private:
 
 public:
     MakeBinOpMembers(ExprOpUpdate, "//");
-    virtual void evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, std::string_view errorCtx) override;
+    virtual void evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, const TraceContext & errorCtx) override;
 };
 
 struct ExprConcatStrings : Expr

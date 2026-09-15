@@ -713,9 +713,9 @@ struct CompareValues
 {
     EvalState & state;
     const PosIdx pos;
-    const std::string_view errorCtx;
+    const TraceContext errorCtx;
 
-    CompareValues(EvalState & state, const PosIdx pos, const std::string_view && errorCtx)
+    CompareValues(EvalState & state, const PosIdx pos, TraceContext errorCtx)
         : state(state)
         , pos(pos)
         , errorCtx(errorCtx) {};
@@ -725,7 +725,7 @@ struct CompareValues
         return (*this)(v1, v2, errorCtx);
     }
 
-    bool operator()(Value * v1, Value * v2, std::string_view errorCtx) const
+    bool operator()(Value * v1, Value * v2, const TraceContext & errorCtx) const
     {
         try {
             if (v1->type() == nFloat && v2->type() == nInt)

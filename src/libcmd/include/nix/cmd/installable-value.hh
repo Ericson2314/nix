@@ -136,7 +136,7 @@ protected:
      * matched the above criteria.
      */
     std::optional<DerivedPathWithInfo>
-    trySinglePathToDerivedPaths(Value & v, const PosIdx pos, std::string_view errorCtx);
+    trySinglePathToDerivedPaths(Value & v, const PosIdx pos, const TraceContext & errorCtx);
 };
 
 } // namespace nix
