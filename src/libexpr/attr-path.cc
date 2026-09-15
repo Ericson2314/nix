@@ -135,8 +135,7 @@ std::pair<SourcePath, uint32_t> findPackageFilename(EvalState & state, Value & v
     // FIXME: is it possible to extract the Pos object instead of doing this
     //        toString + parsing?
     NixStringContext context;
-    auto path =
-        state.coerceToPath(noPos, *v2, context, "while evaluating the 'meta.position' attribute of a derivation");
+    auto path = state.coerceToPath(noPos, *v2, context, derivationAttribute("meta.position"));
 
     auto fn = path.path.abs();
 

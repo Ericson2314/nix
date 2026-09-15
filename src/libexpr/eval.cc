@@ -1964,40 +1964,34 @@ void ExprOpNot::eval(EvalState & state, Env & env, Value & v)
 void ExprOpEq::eval(EvalState & state, Env & env, Value & v)
 {
     Value v1;
-    e1->eval(state, env, v1, "in the left operand of '=='");
+    e1->eval(state, env, v1, leftOperand("=="));
     Value v2;
-    e2->eval(state, env, v2, "in the right operand of '=='");
+    e2->eval(state, env, v2, rightOperand("=="));
     v.mkBool(state.eqValues(v1, v2, pos, "while testing two values for equality"));
 }
 
 void ExprOpNEq::eval(EvalState & state, Env & env, Value & v)
 {
     Value v1;
-    e1->eval(state, env, v1, "in the left operand of '!='");
+    e1->eval(state, env, v1, leftOperand("!="));
     Value v2;
-    e2->eval(state, env, v2, "in the right operand of '!='");
+    e2->eval(state, env, v2, rightOperand("!="));
     v.mkBool(!state.eqValues(v1, v2, pos, "while testing two values for inequality"));
 }
 
 void ExprOpAnd::eval(EvalState & state, Env & env, Value & v)
 {
-    v.mkBool(
-        state.evalBool(env, e1, "in the left operand of '&&'")
-        && state.evalBool(env, e2, "in the right operand of '&&'"));
+    v.mkBool(state.evalBool(env, e1, leftOperand("&&")) && state.evalBool(env, e2, rightOperand("&&")));
 }
 
 void ExprOpOr::eval(EvalState & state, Env & env, Value & v)
 {
-    v.mkBool(
-        state.evalBool(env, e1, "in the left operand of '||'")
-        || state.evalBool(env, e2, "in the right operand of '||'"));
+    v.mkBool(state.evalBool(env, e1, leftOperand("||")) || state.evalBool(env, e2, rightOperand("||")));
 }
 
 void ExprOpImpl::eval(EvalState & state, Env & env, Value & v)
 {
-    v.mkBool(
-        !state.evalBool(env, e1, "in the left operand of '->'")
-        || state.evalBool(env, e2, "in the right operand of '->'"));
+    v.mkBool(!state.evalBool(env, e1, leftOperand("->")) || state.evalBool(env, e2, rightOperand("->")));
 }
 
 void ExprOpUpdate::eval(EvalState & state, Value & v, Value & v1, Value & v2)
@@ -2102,8 +2096,8 @@ void ExprOpUpdate::evalForUpdate(EvalState & state, Env & env, UpdateQueue & q)
 {
     /* Output rightmost attrset first to the merge queue as the one
        with the most priority. */
-    e2->evalForUpdate(state, env, q, "in the right operand of '//'");
-    e1->evalForUpdate(state, env, q, "in the left operand of '//'");
+    e2->evalForUpdate(state, env, q, rightOperand("//"));
+    e1->evalForUpdate(state, env, q, leftOperand("//"));
 }
 
 void ExprOpUpdate::evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, const TraceContext & errorCtx)
@@ -2114,9 +2108,9 @@ void ExprOpUpdate::evalForUpdate(EvalState & state, Env & env, UpdateQueue & q, 
 void ExprOpConcatLists::eval(EvalState & state, Env & env, Value & v)
 {
     Value v1;
-    e1->eval(state, env, v1, "in the left operand of '++'");
+    e1->eval(state, env, v1, leftOperand("++"));
     Value v2;
-    e2->eval(state, env, v2, "in the right operand of '++'");
+    e2->eval(state, env, v2, rightOperand("++"));
     Value * lists[2] = {&v1, &v2};
     state.concatLists(v, lists, pos, "while evaluating one of the elements to concatenate");
 }

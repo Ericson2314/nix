@@ -4756,18 +4756,17 @@ static void prim_convertHash(EvalState & state, CallSite callSite, Value * const
     auto inputAttrs = args[0]->attrs();
 
     auto iteratorHash = state.getAttr(state.symbols.create("hash"), inputAttrs, "while locating the attribute 'hash'");
-    auto hash = state.forceStringNoCtx(*iteratorHash->value, noPos, "while evaluating the attribute 'hash'");
+    auto hash = state.forceStringNoCtx(*iteratorHash->value, noPos, evaluatingAttribute("hash"));
 
     auto iteratorHashAlgo = inputAttrs->get(state.symbols.create("hashAlgo"));
     std::optional<HashAlgorithm> ha = std::nullopt;
     if (iteratorHashAlgo)
-        ha = parseHashAlgo(
-            state.forceStringNoCtx(*iteratorHashAlgo->value, noPos, "while evaluating the attribute 'hashAlgo'"));
+        ha = parseHashAlgo(state.forceStringNoCtx(*iteratorHashAlgo->value, noPos, evaluatingAttribute("hashAlgo")));
 
     auto iteratorToHashFormat = state.getAttr(
         state.symbols.create("toHashFormat"), args[0]->attrs(), "while locating the attribute 'toHashFormat'");
     HashFormat hf = parseHashFormat(
-        state.forceStringNoCtx(*iteratorToHashFormat->value, noPos, "while evaluating the attribute 'toHashFormat'"));
+        state.forceStringNoCtx(*iteratorToHashFormat->value, noPos, evaluatingAttribute("toHashFormat")));
 
     v.mkString(Hash::parseAny(hash, ha).to_string(hf, hf == HashFormat::SRI), state.mem);
 }

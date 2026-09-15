@@ -155,6 +155,14 @@ TEST_F(StructuredTraceTest, builtinArgument)
             nlohmann::json{{"type", "evaluating-builtin-argument"}, {"builtin", "length"}, {"argument", 1}}));
 }
 
+TEST_F(StructuredTraceTest, operand)
+{
+    auto frames = failureFrames("true && 1");
+    EXPECT_THAT(
+        frames,
+        testing::Contains(nlohmann::json{{"type", "evaluating-operand"}, {"operator", "&&"}, {"side", "right"}}));
+}
+
 TEST_F(StructuredTraceTest, callingFunctionAndAttribute)
 {
     auto frames = failureFrames("let f = x: x.a; in { a = f 1; }.a");

@@ -34,7 +34,33 @@ struct TraceContext
         unsigned index;
     };
 
-    std::variant<std::string_view, BuiltinArgument> inner;
+    /**
+     * "in the left operand of '&&'".
+     */
+    struct Operand
+    {
+        std::string_view op;
+
+        enum Side { Left, Right } side;
+    };
+
+    /**
+     * "while evaluating the 'name' attribute of a derivation".
+     */
+    struct DerivationAttribute
+    {
+        std::string_view attribute;
+    };
+
+    /**
+     * "while evaluating the attribute 'hash'".
+     */
+    struct Attribute
+    {
+        std::string_view attribute;
+    };
+
+    std::variant<std::string_view, BuiltinArgument, Operand, DerivationAttribute, Attribute> inner;
 
     TraceContext(std::string_view text)
         : inner(text)
@@ -61,6 +87,21 @@ struct TraceContext
     {
     }
 
+    TraceContext(Operand operand)
+        : inner(operand)
+    {
+    }
+
+    TraceContext(DerivationAttribute attribute)
+        : inner(attribute)
+    {
+    }
+
+    TraceContext(Attribute attribute)
+        : inner(attribute)
+    {
+    }
+
     /**
      * Whether there is nothing here. Some callers pass `""` to mean that.
      */
@@ -78,6 +119,26 @@ struct TraceContext
 inline TraceContext builtinArgument(std::string_view name, unsigned index)
 {
     return TraceContext::BuiltinArgument{.builtin = name, .index = index};
+}
+
+inline TraceContext leftOperand(std::string_view op)
+{
+    return TraceContext::Operand{.op = op, .side = TraceContext::Operand::Left};
+}
+
+inline TraceContext rightOperand(std::string_view op)
+{
+    return TraceContext::Operand{.op = op, .side = TraceContext::Operand::Right};
+}
+
+inline TraceContext derivationAttribute(std::string_view attribute)
+{
+    return TraceContext::DerivationAttribute{.attribute = attribute};
+}
+
+inline TraceContext evaluatingAttribute(std::string_view attribute)
+{
+    return TraceContext::Attribute{.attribute = attribute};
 }
 
 } // namespace nix

@@ -50,7 +50,7 @@ std::string PackageInfo::queryName() const
         auto i = attrs->get(state->s.name);
         if (!i)
             state->error<TypeError>("derivation name missing").debugThrow();
-        name = state->forceStringNoCtx(*i->value, noPos, "while evaluating the 'name' attribute of a derivation");
+        name = state->forceStringNoCtx(*i->value, noPos, derivationAttribute("name"));
     }
     return name;
 }
@@ -59,9 +59,7 @@ std::string PackageInfo::querySystem() const
 {
     if (system == "" && attrs) {
         auto i = attrs->get(state->s.system);
-        system =
-            !i ? "unknown"
-               : state->forceStringNoCtx(*i->value, i->pos, "while evaluating the 'system' attribute of a derivation");
+        system = !i ? "unknown" : state->forceStringNoCtx(*i->value, i->pos, derivationAttribute("system"));
     }
     return system;
 }
@@ -71,12 +69,11 @@ std::optional<StorePath> PackageInfo::queryDrvPath() const
     if (!drvPath && attrs) {
         if (auto i = attrs->get(state->s.drvPath)) {
             NixStringContext context;
-            auto found = state->coerceToStorePath(
-                i->pos, *i->value, context, "while evaluating the 'drvPath' attribute of a derivation");
+            auto found = state->coerceToStorePath(i->pos, *i->value, context, derivationAttribute("drvPath"));
             try {
                 found.requireDerivation();
             } catch (Error & e) {
-                e.addTrace(state->positions[i->pos], "while evaluating the 'drvPath' attribute of a derivation");
+                e.addTrace(state->positions[i->pos], derivationAttribute("drvPath"));
                 throw;
             }
             drvPath = {std::move(found)};
@@ -113,7 +110,7 @@ PackageInfo::Outputs PackageInfo::queryOutputs(bool withPaths, bool onlyOutputsT
         /* Get the ‘outputs’ list. */
         const Attr * i;
         if (attrs && (i = attrs->get(state->s.outputs))) {
-            state->forceList(*i->value, i->pos, "while evaluating the 'outputs' attribute of a derivation");
+            state->forceList(*i->value, i->pos, derivationAttribute("outputs"));
 
             /* For each output... */
             for (auto elem : i->value->listView()) {
@@ -148,7 +145,7 @@ PackageInfo::Outputs PackageInfo::queryOutputs(bool withPaths, bool onlyOutputsT
 
     const Attr * i;
     if (attrs && (i = attrs->get(state->s.outputSpecified))
-        && state->forceBool(*i->value, i->pos, "while evaluating the 'outputSpecified' attribute of a derivation")) {
+        && state->forceBool(*i->value, i->pos, derivationAttribute("outputSpecified"))) {
         Outputs result;
         auto out = outputs.find(queryOutputName());
         if (out == outputs.end())
@@ -198,7 +195,7 @@ const Bindings * PackageInfo::getMeta()
     auto a = attrs->get(state->s.meta);
     if (!a)
         return 0;
-    state->forceAttrs(*a->value, a->pos, "while evaluating the 'meta' attribute of a derivation");
+    state->forceAttrs(*a->value, a->pos, derivationAttribute("meta"));
     meta = a->value->attrs();
     return meta;
 }
