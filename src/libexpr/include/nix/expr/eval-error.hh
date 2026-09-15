@@ -88,6 +88,25 @@ public:
 };
 
 /**
+ * An `assert` expression whose condition was false.
+ */
+class AssertFailedError : public CloneableError<AssertFailedError, AssertionError>
+{
+    void anchor() override;
+
+public:
+    /**
+     * The condition, as source text.
+     */
+    std::string expression;
+
+    AssertFailedError(EvalState & state, std::string expression);
+
+    HintFmt renderMessage() const override;
+    std::optional<nlohmann::json> toJSON() const override;
+};
+
+/**
  * `builtins.abort`.
  */
 class Abort : public CloneableError<Abort, EvalError>

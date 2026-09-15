@@ -1951,7 +1951,7 @@ void ExprAssert::eval(EvalState & state, Env & env, Value & v)
             }
         }
 
-        state.error<AssertionError>("assertion '%1%' failed", exprStr).atPos(pos).withFrame(env, *this).debugThrow();
+        state.error<AssertFailedError>(std::string(exprStr)).atPos(pos).withFrame(env, *this).debugThrow();
     }
     body->eval(state, env, v);
 }

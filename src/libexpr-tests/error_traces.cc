@@ -97,6 +97,12 @@ TEST_F(StructuredErrorTest, unexpectedType)
         (nlohmann::json{{"type", "unexpected-type"}, {"expected", "set"}, {"found", "integer"}, {"value", "1"}}));
 }
 
+TEST_F(StructuredErrorTest, assertFailed)
+{
+    EXPECT_EQ(
+        failureJSON("assert false; true"), (nlohmann::json{{"type", "assertion-failed"}, {"expression", "false"}}));
+}
+
 TEST_F(StructuredErrorTest, infiniteRecursion)
 {
     EXPECT_EQ(failureJSON("let x = x; in x"), (nlohmann::json{{"type", "infinite-recursion"}}));

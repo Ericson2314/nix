@@ -35,6 +35,22 @@ std::optional<nlohmann::json> ThrownError::toJSON() const
     return nlohmann::json{{"type", "throw"}, {"message", text}};
 }
 
+AssertFailedError::AssertFailedError(EvalState & state, std::string expression)
+    : CloneableError(state, ErrorInfo{.level = lvlError})
+    , expression(std::move(expression))
+{
+}
+
+HintFmt AssertFailedError::renderMessage() const
+{
+    return HintFmt("assertion '%1%' failed", expression);
+}
+
+std::optional<nlohmann::json> AssertFailedError::toJSON() const
+{
+    return nlohmann::json{{"type", "assertion-failed"}, {"expression", expression}};
+}
+
 Abort::Abort(EvalState & state, std::string text)
     : CloneableError(state, ErrorInfo{.level = lvlError})
     , text(std::move(text))
@@ -261,6 +277,7 @@ void EvalErrorBuilder<T>::panic()
 template class EvalErrorBuilder<EvalBaseError>;
 template class EvalErrorBuilder<EvalError>;
 template class EvalErrorBuilder<AssertionError>;
+template class EvalErrorBuilder<AssertFailedError>;
 template class EvalErrorBuilder<ThrownError>;
 template class EvalErrorBuilder<Abort>;
 template class EvalErrorBuilder<TypeError>;
@@ -280,6 +297,8 @@ void ParseError::anchor() {}
 void EvalError::anchor() {}
 
 void AssertionError::anchor() {}
+
+void AssertFailedError::anchor() {}
 
 void ThrownError::anchor() {}
 

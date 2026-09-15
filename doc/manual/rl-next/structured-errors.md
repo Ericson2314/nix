@@ -17,6 +17,9 @@ with its message instead of being lost.
 The first errors to expose their content are from the evaluator:
 `builtins.throw` and `builtins.abort` (`type` `throw` and `abort`, with the
 `message`), undefined variables and missing function arguments (`name`),
-values of the wrong type (`expected`, `found`, `value`), infinite
-recursion, stack overflow, and invalid store paths (`path`). More will
-follow.
+values of the wrong type (`expected`, `found`, `value`), failed `assert`
+expressions (`expression`), infinite recursion, stack overflow, and
+invalid store paths (`path`). Build failures carry their `status` and
+whether the build was non-deterministic. The evaluator's own trace
+frames carry data too: which builtin or function was being called, which
+attribute or file was being evaluated. More will follow.

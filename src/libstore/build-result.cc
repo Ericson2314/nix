@@ -127,6 +127,15 @@ static BuildResult::Failure::Status failureStatusFromString(std::string_view str
     throw UnstructuredError("unknown built result failure status '%s'", str);
 }
 
+std::optional<nlohmann::json> BuildError::toJSON() const
+{
+    return nlohmann::json{
+        {"type", "build-failure"},
+        {"status", failureStatusToString(status)},
+        {"isNonDeterministic", isNonDeterministic},
+    };
+}
+
 bool BuildError::operator==(const BuildError & other) const noexcept
 {
     return status == other.status && isNonDeterministic == other.isNonDeterministic && message() == other.message();

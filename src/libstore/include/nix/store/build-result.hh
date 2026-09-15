@@ -117,6 +117,8 @@ public:
 
     bool operator==(const BuildError &) const noexcept;
     std::strong_ordering operator<=>(const BuildError &) const noexcept;
+
+    std::optional<nlohmann::json> toJSON() const override;
 };
 
 struct BuildResult

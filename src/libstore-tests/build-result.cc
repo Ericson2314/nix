@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 #include "nix/store/build-result.hh"
 #include "nix/util/tests/characterization.hh"
@@ -91,5 +92,21 @@ INSTANTIATE_TEST_SUITE_P(
                 .cpuSystem = std::chrono::seconds(604),
             },
         }));
+
+TEST(BuildError, toJSON)
+{
+    BuildError e({
+        .status = BuildResult::Failure::NotDeterministic,
+        .msg = HintFmt("no idea why"),
+        .isNonDeterministic = true,
+    });
+    EXPECT_EQ(
+        e.toJSON(),
+        (nlohmann::json{
+            {"type", "build-failure"},
+            {"status", "NotDeterministic"},
+            {"isNonDeterministic", true},
+        }));
+}
 
 } // namespace nix
