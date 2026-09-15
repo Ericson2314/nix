@@ -23,7 +23,7 @@ namespace nix {
 struct TraceContext
 {
     /**
-     * "while evaluating the first argument passed to builtins.foo".
+     * builtinArgument("foo", 1).
      */
     struct BuiltinArgument
     {

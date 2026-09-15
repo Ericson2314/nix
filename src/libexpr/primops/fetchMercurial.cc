@@ -52,14 +52,7 @@ static void prim_fetchMercurial(EvalState & state, CallSite callSite, Value * co
             state.error<EvalError>("'url' argument required").atPos(noPos).debugThrow();
 
     } else
-        url = state
-                  .coerceToString(
-                      noPos,
-                      *args[0],
-                      context,
-                      "while evaluating the first argument passed to builtins.fetchMercurial",
-                      false,
-                      false)
+        url = state.coerceToString(noPos, *args[0], context, builtinArgument("fetchMercurial", 1), false, false)
                   .toOwned();
 
     // FIXME: git externals probably can be used to bypass the URI

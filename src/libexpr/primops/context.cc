@@ -260,10 +260,9 @@ static RegisterPrimOp primop_getContext(
 static void prim_appendContext(EvalState & state, CallSite callSite, Value * const * args, Value & v)
 {
     NixStringContext context;
-    auto orig = state.forceString(
-        *args[0], context, noPos, "while evaluating the first argument passed to builtins.appendContext");
+    auto orig = state.forceString(*args[0], context, noPos, builtinArgument("appendContext", 1));
 
-    state.forceAttrs(*args[1], noPos, "while evaluating the second argument passed to builtins.appendContext");
+    state.forceAttrs(*args[1], noPos, builtinArgument("appendContext", 2));
 
     auto sPath = state.symbols.create("path");
     auto sAllOutputs = state.symbols.create("allOutputs");
