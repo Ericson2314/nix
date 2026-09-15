@@ -211,6 +211,13 @@ EvalErrorBuilder<T> & EvalErrorBuilder<T>::addTrace(PosIdx pos, HintFmt hint)
 }
 
 template<class T>
+EvalErrorBuilder<T> & EvalErrorBuilder<T>::addTrace(PosIdx pos, HintFmt hint, nlohmann::json data)
+{
+    error.addTrace(error.state.positions[pos], std::move(hint), std::move(data));
+    return *this;
+}
+
+template<class T>
 template<typename... Args>
 EvalErrorBuilder<T> &
 EvalErrorBuilder<T>::addTrace(PosIdx pos, std::string_view formatString, const Args &... formatArgs)

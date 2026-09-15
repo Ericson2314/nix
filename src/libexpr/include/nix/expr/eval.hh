@@ -761,6 +761,11 @@ public:
     template<typename... Args>
     [[gnu::noinline]]
     void addErrorTrace(Error & e, const PosIdx pos, const Args &... formatArgs) const;
+    /**
+     * Add a trace item with structured data, see `Trace::data`.
+     */
+    [[gnu::noinline]]
+    void addErrorTrace(Error & e, const PosIdx pos, HintFmt hint, nlohmann::json data) const;
 
 public:
     /**

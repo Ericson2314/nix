@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "nix/expr/tests/libexpr.hh"
+#include "nix/util/finally.hh"
 
 #include <nlohmann/json.hpp>
 
@@ -104,6 +105,47 @@ TEST_F(StructuredErrorTest, infiniteRecursion)
 TEST_F(StructuredErrorTest, unstructuredHasNone)
 {
     EXPECT_EQ(failureJSON("builtins.baseNameOf 1 2"), std::nullopt);
+}
+
+class StructuredTraceTest : public LibExprTest
+{
+protected:
+    /**
+     * Evaluate `input`, which must fail, and return the structured data
+     * of its trace frames, innermost first, with `null` for frames that
+     * have none.
+     */
+    nlohmann::json failureFrames(std::string input)
+    {
+        bool oldShowTrace = loggerSettings.showTrace.get();
+        loggerSettings.showTrace.assign(true);
+        Finally restoreShowTrace([oldShowTrace] { loggerSettings.showTrace.assign(oldShowTrace); });
+        try {
+            eval(input);
+        } catch (Error & e) {
+            auto frames = nlohmann::json::array();
+            for (auto & trace : e.info().traces)
+                frames.push_back(trace.data ? *trace.data : nlohmann::json());
+            return frames;
+        }
+        ADD_FAILURE() << "expected '" << input << "' to fail";
+        return nullptr;
+    }
+};
+
+TEST_F(StructuredTraceTest, callingBuiltin)
+{
+    auto frames = failureFrames("builtins.length (builtins.attrNames 1)");
+    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "calling-builtin"}, {"name", "attrNames"}}));
+    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "calling-builtin"}, {"name", "length"}}));
+}
+
+TEST_F(StructuredTraceTest, callingFunctionAndAttribute)
+{
+    auto frames = failureFrames("let f = x: x.a; in { a = f 1; }.a");
+    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "calling-function"}, {"name", "f"}}));
+    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "call-site"}}));
+    EXPECT_THAT(frames, testing::Contains(nlohmann::json{{"type", "evaluating-attribute"}, {"attribute", "a"}}));
 }
 
 } /* namespace nix */

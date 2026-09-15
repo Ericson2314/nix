@@ -880,6 +880,11 @@ void EvalState::addErrorTrace(Error & e, const PosIdx pos, const Args &... forma
     e.addTrace(positions[pos], HintFmt(formatArgs...));
 }
 
+void EvalState::addErrorTrace(Error & e, const PosIdx pos, HintFmt hint, nlohmann::json data) const
+{
+    e.addTrace(positions[pos], std::move(hint), std::move(data));
+}
+
 template<typename... Args>
 static std::unique_ptr<DebugTraceStacker> makeDebugTraceStacker(
     EvalState & state, Expr & expr, Env & env, std::variant<Pos, PosIdx> pos, const Args &... formatArgs)
@@ -1146,7 +1151,10 @@ struct ExprParseFile : Expr, gc
 
             state.eval(e, v);
         } catch (Error & e) {
-            state.addErrorTrace(e, "while evaluating the file '%s':", path.to_string());
+            e.addTrace(
+                nullptr,
+                HintFmt("while evaluating the file '%s':", path.to_string()),
+                nlohmann::json{{"type", "evaluating-file"}, {"path", path.to_string()}});
             throw;
         }
     }
@@ -1510,12 +1518,20 @@ void ExprSelect::eval(EvalState & state, Env & env, Value & v)
             if (!(origin && *origin == state.derivationInternal)) {
                 auto successPath =
                     showAttrSelectionPath(state, env, std::span<const AttrName>(attrPathStart, unresolvedOrEnd));
-                state.addErrorTrace(e, attrPos, "from the definition of '%1%'", successPath);
+                state.addErrorTrace(
+                    e,
+                    attrPos,
+                    HintFmt("from the definition of '%1%'", successPath),
+                    nlohmann::json{{"type", "attribute-definition"}, {"attribute", successPath}});
             }
         }
         // Add main item: the selection site itself (`a.b`), ie the actual access
+        auto attrPath = showAttrSelectionPath(state, env, getAttrPath());
         state.addErrorTrace(
-            e, getPos(), "while evaluating the attribute '%1%'", showAttrSelectionPath(state, env, getAttrPath()));
+            e,
+            getPos(),
+            HintFmt("while evaluating the attribute '%1%'", attrPath),
+            nlohmann::json{{"type", "evaluating-attribute"}, {"attribute", attrPath}});
         throw;
     }
 
@@ -1610,7 +1626,7 @@ void EvalState::callFunction(Value & fun, std::span<Value * const> args, Value &
                     forceAttrs(*args[0], lambda.pos, "while evaluating the value passed for the lambda argument");
                 } catch (Error & e) {
                     if (pos)
-                        e.addTrace(positions[pos], "from call site");
+                        e.addTrace(positions[pos], HintFmt("from call site"), nlohmann::json{{"type", "call-site"}});
                     throw;
                 }
 
@@ -1630,7 +1646,7 @@ void EvalState::callFunction(Value & fun, std::span<Value * const> args, Value &
                                 (lambda.name ? std::string(symbols[lambda.name]) : "anonymous lambda"),
                                 symbols[i.name])
                                 .atPos(lambda.pos)
-                                .withTrace(pos, "from call site")
+                                .addTrace(pos, HintFmt("from call site"), nlohmann::json{{"type", "call-site"}})
                                 .withFrame(*vCur.lambda().env, lambda)
                                 .debugThrow();
                         }
@@ -1657,7 +1673,7 @@ void EvalState::callFunction(Value & fun, std::span<Value * const> args, Value &
                                 (lambda.name ? std::string(symbols[lambda.name]) : "anonymous lambda"),
                                 symbols[i.name])
                                 .atPos(lambda.pos)
-                                .withTrace(pos, "from call site")
+                                .addTrace(pos, HintFmt("from call site"), nlohmann::json{{"type", "call-site"}})
                                 .withSuggestions(suggestions)
                                 .withFrame(*vCur.lambda().env, lambda)
                                 .debugThrow();
@@ -1690,10 +1706,16 @@ void EvalState::callFunction(Value & fun, std::span<Value * const> args, Value &
                     addErrorTrace(
                         e,
                         lambda.pos,
-                        "while calling %s",
-                        lambda.name ? concatStrings("'", symbols[lambda.name], "'") : "anonymous lambda");
+                        HintFmt(
+                            "while calling %s",
+                            lambda.name ? concatStrings("'", symbols[lambda.name], "'") : "anonymous lambda"),
+                        nlohmann::json{
+                            {"type", "calling-function"},
+                            {"name",
+                             lambda.name ? nlohmann::json(std::string(symbols[lambda.name])) : nlohmann::json()},
+                        });
                     if (pos)
-                        addErrorTrace(e, pos, "from call site");
+                        addErrorTrace(e, pos, HintFmt("from call site"), nlohmann::json{{"type", "call-site"}});
                 }
                 throw;
             }
@@ -1721,7 +1743,11 @@ void EvalState::callFunction(Value & fun, std::span<Value * const> args, Value &
                     fn->impl(*this, CallSite{pos}, args.data(), vCur);
                 } catch (Error & e) {
                     if (fn->addTrace)
-                        addErrorTrace(e, pos, "while calling the '%1%' builtin", fn->name);
+                        addErrorTrace(
+                            e,
+                            pos,
+                            HintFmt("while calling the '%1%' builtin", fn->name),
+                            nlohmann::json{{"type", "calling-builtin"}, {"name", fn->name}});
                     throw;
                 }
 
@@ -1771,7 +1797,11 @@ void EvalState::callFunction(Value & fun, std::span<Value * const> args, Value &
                     fn->impl(*this, CallSite{pos}, vArgs, vCur);
                 } catch (Error & e) {
                     if (fn->addTrace)
-                        addErrorTrace(e, pos, "while calling the '%1%' builtin", fn->name);
+                        addErrorTrace(
+                            e,
+                            pos,
+                            HintFmt("while calling the '%1%' builtin", fn->name),
+                            nlohmann::json{{"type", "calling-builtin"}, {"name", fn->name}});
                     throw;
                 }
 
@@ -1786,7 +1816,10 @@ void EvalState::callFunction(Value & fun, std::span<Value * const> args, Value &
             try {
                 callFunction(*functor->value, std::to_array({&(*allocValue() = vCur), args[0]}), vCur, functor->pos);
             } catch (Error & e) {
-                e.addTrace(positions[pos], "while calling a functor (an attribute set with a '__functor' attribute)");
+                e.addTrace(
+                    positions[pos],
+                    HintFmt("while calling a functor (an attribute set with a '__functor' attribute)"),
+                    nlohmann::json{{"type", "calling-functor"}});
                 throw;
             }
             args = args.subspan(1);
@@ -1910,7 +1943,10 @@ void ExprAssert::eval(EvalState & state, Env & env, Value & v)
                 eq->e2->eval(state, env, v2);
                 state.assertEqValues(v1, v2, eq->pos, "in an equality assertion");
             } catch (AssertionError & e) {
-                e.addTrace(state.positions[pos], "while evaluating the condition of the assertion '%s'", exprStr);
+                e.addTrace(
+                    state.positions[pos],
+                    HintFmt("while evaluating the condition of the assertion '%s'", exprStr),
+                    nlohmann::json{{"type", "evaluating-assertion-condition"}, {"expression", exprStr}});
                 throw;
             }
         }
@@ -2339,7 +2375,12 @@ void EvalState::forceValueDeep(Value & v)
 
                     recurse(*i.value);
                 } catch (Error & e) {
-                    state.addErrorTrace(e, i.pos, "while evaluating the attribute '%1%'", state.symbols[i.name]);
+                    state.addErrorTrace(
+                        e,
+                        i.pos,
+                        HintFmt("while evaluating the attribute '%1%'", state.symbols[i.name]),
+                        nlohmann::json{
+                            {"type", "evaluating-attribute"}, {"attribute", std::string(state.symbols[i.name])}});
                     throw;
                 }
         }

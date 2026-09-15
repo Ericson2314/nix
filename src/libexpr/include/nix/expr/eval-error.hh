@@ -256,6 +256,11 @@ public:
 
     [[nodiscard, gnu::noinline]] EvalErrorBuilder<T> & addTrace(PosIdx pos, HintFmt hint);
 
+    /**
+     * Add a trace item with structured data, see `Trace::data`.
+     */
+    [[nodiscard, gnu::noinline]] EvalErrorBuilder<T> & addTrace(PosIdx pos, HintFmt hint, nlohmann::json data);
+
     [[nodiscard, gnu::noinline]] EvalErrorBuilder<T> & setIsFromExpr();
 
     template<typename... Args>

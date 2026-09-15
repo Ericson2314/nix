@@ -4,6 +4,7 @@
 #include "nix/store/store-api.hh"
 #include "nix/store/path-with-outputs.hh"
 
+#include <nlohmann/json.hpp>
 #include <cstring>
 
 namespace nix {
@@ -443,7 +444,10 @@ static void getDerivations(
                     }
                 }
             } catch (Error & e) {
-                e.addTrace(state.positions[i->pos], "while evaluating the attribute '%s'", symbol);
+                e.addTrace(
+                    state.positions[i->pos],
+                    HintFmt("while evaluating the attribute '%s'", symbol),
+                    nlohmann::json{{"type", "evaluating-attribute"}, {"attribute", std::string(symbol)}});
                 throw;
             }
         }
