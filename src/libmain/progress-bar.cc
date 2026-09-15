@@ -235,7 +235,7 @@ public:
         log(*state, lvl, s);
     }
 
-    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg, const nlohmann::json * structured) noexcept override
     {
         auto state(state_.lock());
 

@@ -38,10 +38,10 @@ public:
             logger->log(lvl, s);
     }
 
-    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg, const nlohmann::json * structured) noexcept override
     {
         for (auto & logger : loggers)
-            logger->logEI(ei, msg);
+            logger->logEI(ei, msg, structured);
     }
 
     void startActivity(

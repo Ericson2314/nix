@@ -30,6 +30,8 @@
 #include <concepts>
 #include <type_traits>
 
+#include <nlohmann/json_fwd.hpp>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -234,6 +236,14 @@ public:
     {
         return renderMessage().str();
     }
+
+    /**
+     * The structured content of the error, if it has any, for machine
+     * consumption: the JSON logger emits it alongside the rendered
+     * message. Errors with fields should override this to expose them;
+     * unstructured errors have nothing to offer beyond the message.
+     */
+    virtual std::optional<nlohmann::json> toJSON() const;
 
     const char * what() const noexcept override
     {

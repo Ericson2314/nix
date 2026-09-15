@@ -126,7 +126,7 @@ public:
         writeToStderr(prefix + filterANSIEscapes(s, !tty) + "\n");
     }
 
-    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg, const nlohmann::json * structured) noexcept override
     {
         std::ostringstream oss;
         showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
@@ -289,7 +289,7 @@ struct JSONLogger : Logger
         write(json);
     }
 
-    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg, const nlohmann::json * structured) noexcept override
     {
         std::ostringstream oss;
         showErrorInfo(oss, ei, msg, loggerSettings.showTrace.get());
@@ -299,6 +299,8 @@ struct JSONLogger : Logger
         json["level"] = ei.level;
         json["msg"] = oss.str();
         json["raw_msg"] = msg.str();
+        if (structured)
+            json["structured"] = *structured;
         to_json(json, ei.pos);
 
         if (loggerSettings.showTrace.get() && !ei.traces.empty()) {
@@ -530,6 +532,14 @@ Activity::~Activity()
     } catch (...) {
         ignoreExceptionInDestructor();
     }
+}
+
+void logEx(Verbosity level, const BaseError & e) noexcept
+{
+    if (level > verbosity)
+        return;
+    auto structured = e.toJSON();
+    logger->logEI(level, e.info(), e.renderMessage(), structured ? &*structured : nullptr);
 }
 
 } // namespace nix

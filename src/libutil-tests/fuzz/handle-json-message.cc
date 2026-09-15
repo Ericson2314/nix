@@ -6,7 +6,9 @@ class BlackholeLogger : public nix::Logger
 {
     void log(nix::Verbosity lvl, std::string_view s) noexcept override {}
 
-    void logEI(const nix::ErrorInfo & ei, const nix::HintFmt & msg) noexcept override {}
+    void logEI(const nix::ErrorInfo & ei, const nix::HintFmt & msg, const nlohmann::json * structured) noexcept override
+    {
+    }
 };
 
 } // namespace

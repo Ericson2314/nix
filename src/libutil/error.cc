@@ -1,6 +1,8 @@
 #include <algorithm>
 
 #include "nix/util/error.hh"
+
+#include <nlohmann/json.hpp>
 #include "nix/util/environment-variables.hh"
 #include "nix/util/exit.hh"
 #include "nix/util/signals.hh"
@@ -19,6 +21,11 @@ void BaseError::anchor() {}
 void Error::anchor() {}
 
 void UnstructuredError::anchor() {}
+
+std::optional<nlohmann::json> BaseError::toJSON() const
+{
+    return std::nullopt;
+}
 
 void UsageError::anchor() {}
 

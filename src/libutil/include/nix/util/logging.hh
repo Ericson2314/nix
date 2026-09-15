@@ -163,13 +163,18 @@ public:
     /**
      * Log an error, given its metadata and its message separately.
      * See `ErrorInfo` for why the two are apart.
+     *
+     * @param structured The error's structured content, if it has any
+     * (see `BaseError::toJSON`), for loggers that can do something with
+     * it. Most cannot and ignore it.
      */
-    virtual void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept = 0;
+    virtual void
+    logEI(const ErrorInfo & ei, const HintFmt & msg, const nlohmann::json * structured = nullptr) noexcept = 0;
 
-    void logEI(Verbosity lvl, ErrorInfo ei, const HintFmt & msg) noexcept
+    void logEI(Verbosity lvl, ErrorInfo ei, const HintFmt & msg, const nlohmann::json * structured = nullptr) noexcept
     {
         ei.level = lvl;
-        logEI(ei, msg);
+        logEI(ei, msg, structured);
     }
 
     virtual void warn(const std::string & msg) noexcept;
@@ -356,11 +361,7 @@ extern Verbosity verbosity;
  * Log an exception, at the given level rather than the one it carries.
  * The usual way to report a caught `Error` to the user.
  */
-inline void logEx(Verbosity level, const BaseError & e) noexcept
-{
-    if (level <= verbosity)
-        logger->logEI(level, e.info(), e.renderMessage());
-}
+void logEx(Verbosity level, const BaseError & e) noexcept;
 
 inline void logExError(const BaseError & e) noexcept
 {

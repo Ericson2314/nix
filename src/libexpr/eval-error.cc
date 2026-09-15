@@ -3,12 +3,19 @@
 #include "nix/expr/value.hh"
 #include "nix/store/store-api.hh"
 
+#include <nlohmann/json.hpp>
+
 namespace nix {
 
 InvalidPathError::InvalidPathError(EvalState & state, const StorePath & path)
     : CloneableError(state, "path '%s' is not valid", state.store->printStorePath(path))
     , path{path}
 {
+}
+
+std::optional<nlohmann::json> InvalidPathError::toJSON() const
+{
+    return nlohmann::json{{"path", state.store->printStorePath(path)}};
 }
 
 template<class T>

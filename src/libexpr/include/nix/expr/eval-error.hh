@@ -113,6 +113,8 @@ public:
     StorePath path;
 
     InvalidPathError(EvalState & state, const StorePath & path);
+
+    std::optional<nlohmann::json> toJSON() const override;
 };
 
 /**

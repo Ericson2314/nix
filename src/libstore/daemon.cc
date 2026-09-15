@@ -110,7 +110,7 @@ struct TunnelLogger : public Logger
         enqueueMsg(buf.s);
     }
 
-    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg, const nlohmann::json * structured) noexcept override
     {
         if (ei.level > verbosity)
             return;

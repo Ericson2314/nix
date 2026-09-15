@@ -2,8 +2,12 @@
 #include "nix/util/tests/characterization.hh"
 #include "nix/util/serialise.hh"
 #include "nix/util/tests/capture-logging.hh"
+#include "nix/util/file-system.hh"
+#include "nix/util/finally.hh"
+#include "nix/util/terminal.hh"
 
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
 namespace nix {
 
@@ -415,9 +419,9 @@ public:
         inner->log(lvl, s);
     }
 
-    void logEI(const ErrorInfo & ei, const HintFmt & msg) noexcept override
+    void logEI(const ErrorInfo & ei, const HintFmt & msg, const nlohmann::json * structured) noexcept override
     {
-        inner->logEI(ei, msg);
+        inner->logEI(ei, msg, structured);
     }
 
     void warn(const std::string & msg) noexcept override
@@ -524,6 +528,76 @@ TEST_P(JSONLogMessageCharacterisationTest, writesExpectedLogs)
 
 INSTANTIATE_TEST_SUITE_P(
     JSONLogMessageCharacterisation, JSONLogMessageCharacterisationTest, ::testing::Values("garbage-in", "legitimate"));
+
+} // namespace
+
+} // namespace nix
+
+namespace nix {
+
+namespace {
+
+/**
+ * An error with fields, as the ones that `BaseError::toJSON` is for.
+ */
+struct StructuredTestError : CloneableError<StructuredTestError, Error>
+{
+    void anchor() override {}
+
+    std::string what;
+    int howMany;
+
+    StructuredTestError(std::string what, int howMany)
+        : CloneableError(ErrorInfo{.level = lvlError})
+        , what(std::move(what))
+        , howMany(howMany)
+    {
+    }
+
+    HintFmt renderMessage() const override
+    {
+        return HintFmt("%d of %s", howMany, what);
+    }
+
+    std::optional<nlohmann::json> toJSON() const override
+    {
+        return nlohmann::json{{"what", what}, {"howMany", howMany}};
+    }
+};
+
+TEST(logEx, structuredErrorReachesJSONLogger)
+{
+    auto tempFile = createAnonymousTempFile();
+    auto jsonLogger = makeJSONLogger(tempFile.get(), /*includeNixPrefix=*/false);
+    Finally restoreLogger([oldLogger = logger] { logger = oldLogger; });
+    logger = jsonLogger.get();
+
+    logExError(StructuredTestError("puppies", 3));
+
+    lseek(tempFile.get(), 0, SEEK_SET);
+    auto record = nlohmann::json::parse(readFile(tempFile.get()));
+
+    EXPECT_EQ(record["action"], "msg");
+    EXPECT_EQ(record["level"], lvlError);
+    EXPECT_EQ(record["structured"], (nlohmann::json{{"what", "puppies"}, {"howMany", 3}}));
+    /* The message is still there for readers that don't know the fields. */
+    EXPECT_EQ(filterANSIEscapes(record["raw_msg"].get<std::string>(), true), "3 of puppies");
+}
+
+TEST(logEx, unstructuredErrorHasNoStructuredField)
+{
+    auto tempFile = createAnonymousTempFile();
+    auto jsonLogger = makeJSONLogger(tempFile.get(), /*includeNixPrefix=*/false);
+    Finally restoreLogger([oldLogger = logger] { logger = oldLogger; });
+    logger = jsonLogger.get();
+
+    logExError(UnstructuredError("just %s", "words"));
+
+    lseek(tempFile.get(), 0, SEEK_SET);
+    auto record = nlohmann::json::parse(readFile(tempFile.get()));
+
+    EXPECT_FALSE(record.contains("structured"));
+}
 
 } // namespace
 
