@@ -1,9 +1,11 @@
 #include "nix/util/serialise.hh"
 #include "nix/util/config.hh"
+#include "nix/util/terminal.hh"
 
 #include <boost/context/detail/exception.hpp>
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <nlohmann/json.hpp>
 
 #include <limits>
 
@@ -57,7 +59,7 @@ TEST(readError, bogusLevelIsClamped)
         StringSink sink;
         sink << "Error" << level << "Error" << "oops" << uint64_t(0) << uint64_t(0);
         StringSource source(sink.s);
-        auto e = readError(source);
+        auto e = readError(source, /*structured=*/false);
         EXPECT_THAT(std::string(e.what()), ::testing::HasSubstr("oops"));
         EXPECT_EQ(e.info().level, Verbosity::lvlVomit);
     }
@@ -68,7 +70,7 @@ TEST(readError, uint64LevelError)
     StringSink sink;
     sink << "Error" << std::numeric_limits<uint64_t>::max() << "Error" << "oops" << uint64_t(0) << uint64_t(0);
     StringSource source(sink.s);
-    EXPECT_THROW(readError(source), SerialisationError);
+    EXPECT_THROW(readError(source, /*structured=*/false), SerialisationError);
 }
 
 TEST(readPadding, works)
@@ -124,5 +126,75 @@ TEST(sourceToSink, forcedUnwindUcaughtExceptions)
 }
 
 #endif
+
+namespace {
+
+struct StructuredTestError : CloneableError<StructuredTestError, Error>
+{
+    void anchor() override {}
+
+    int howMany;
+
+    StructuredTestError(int howMany)
+        : CloneableError(ErrorInfo{.level = lvlError})
+        , howMany(howMany)
+    {
+    }
+
+    HintFmt renderMessage() const override
+    {
+        return HintFmt("%d puppies", howMany);
+    }
+
+    std::optional<nlohmann::json> toJSON() const override
+    {
+        return nlohmann::json{{"howMany", howMany}};
+    }
+};
+
+StructuredTestError makeTestError()
+{
+    StructuredTestError e(3);
+    e.addTrace(nullptr, HintFmt("while counting"), nlohmann::json{{"counting", true}});
+    e.addTrace(nullptr, HintFmt("while %s", "unstructured"));
+    return e;
+}
+
+RemoteError roundTrip(const Error & e, bool structured)
+{
+    StringSink sink;
+    writeError(sink, e, structured);
+    StringSource source(sink.s);
+    return readError(source, structured);
+}
+
+} // namespace
+
+TEST(writeError, structuredRoundTrip)
+{
+    auto e = roundTrip(makeTestError(), /*structured=*/true);
+
+    EXPECT_EQ(filterANSIEscapes(e.message(), true), "3 puppies");
+    EXPECT_EQ(e.toJSON(), (nlohmann::json{{"howMany", 3}}));
+
+    auto & traces = e.info().traces;
+    ASSERT_EQ(traces.size(), 2u);
+    /* `addTrace` prepends, so the last one added is first. */
+    auto trace = traces.begin();
+    EXPECT_FALSE(trace->data);
+    ++trace;
+    ASSERT_TRUE(trace->data);
+    EXPECT_EQ(*trace->data, (nlohmann::json{{"counting", true}}));
+}
+
+TEST(writeError, unstructuredRoundTripDropsData)
+{
+    auto e = roundTrip(makeTestError(), /*structured=*/false);
+
+    EXPECT_EQ(filterANSIEscapes(e.message(), true), "3 puppies");
+    EXPECT_FALSE(e.toJSON());
+    for (auto & trace : e.info().traces)
+        EXPECT_FALSE(trace.data);
+}
 
 } // namespace nix

@@ -593,7 +593,15 @@ inline Sink & operator<<(Sink & sink, uint64_t n)
     return sink;
 }
 
-Sink & operator<<(Sink & in, const Error & ex);
+/**
+ * Write an error in the format `readError` reads.
+ *
+ * @param structured Also write the structured content of the error and
+ * of each of its trace frames (`BaseError::toJSON`, `Trace::data`). Both
+ * ends must agree on this, so over a protocol it is negotiated; see
+ * `WorkerProto::featureStructuredErrors`.
+ */
+void writeError(Sink & sink, const Error & ex, bool structured);
 Sink & operator<<(Sink & sink, std::string_view s);
 Sink & operator<<(Sink & sink, const Strings & s);
 Sink & operator<<(Sink & sink, const StringSet & s);
@@ -650,7 +658,10 @@ Source & operator>>(Source & in, bool & b)
     return in;
 }
 
-UnstructuredError readError(Source & source);
+/**
+ * Read an error written by `writeError`, with the same `structured`.
+ */
+RemoteError readError(Source & source, bool structured);
 
 /**
  * A source that reads a distinct format of concatenated chunks back into its

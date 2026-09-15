@@ -475,6 +475,28 @@ public:
  */
 MakeError(UnstructuredError, Unstructured<Error>);
 
+/**
+ * An error received from another process. Its message arrived as a
+ * string, and its structured content, if any, as whatever JSON the
+ * sender's `toJSON` produced, which `toJSON` here hands on unchanged.
+ * See `readError`.
+ */
+class RemoteError : public CloneableError<RemoteError, UnstructuredError>
+{
+    void anchor() override;
+
+public:
+    std::shared_ptr<const nlohmann::json> structured;
+
+    RemoteError(ErrorInfo && info, HintFmt hint, std::shared_ptr<const nlohmann::json> structured)
+        : CloneableError(std::move(info), std::move(hint))
+        , structured(std::move(structured))
+    {
+    }
+
+    std::optional<nlohmann::json> toJSON() const override;
+};
+
 MakeError(UsageError, UnstructuredError);
 MakeError(UnimplementedError, UnstructuredError);
 

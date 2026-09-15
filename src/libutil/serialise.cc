@@ -1,4 +1,6 @@
 #include "nix/util/serialise.hh"
+
+#include <nlohmann/json.hpp>
 #include "nix/util/file-descriptor.hh"
 #include "nix/util/signals.hh"
 #include "nix/util/socket.hh"
@@ -562,17 +564,35 @@ Sink & operator<<(Sink & sink, const StringSet & s)
     return sink;
 }
 
-Sink & operator<<(Sink & sink, const Error & ex)
+/* Structured content goes over the wire as its JSON text, with the empty
+   string meaning there is none, since JSON text is never empty. */
+static std::string structuredToWire(const std::optional<nlohmann::json> & j)
+{
+    return j ? j->dump() : "";
+}
+
+static std::shared_ptr<const nlohmann::json> structuredFromWire(std::string s)
+{
+    if (s.empty())
+        return nullptr;
+    return std::make_shared<const nlohmann::json>(nlohmann::json::parse(s));
+}
+
+void writeError(Sink & sink, const Error & ex, bool structured)
 {
     auto & info = ex.info();
     sink << "Error" << std::to_underlying(info.level) << "Error" // removed
-         << ex.message() << 0                                    // FIXME: info.errPos
+         << ex.message();
+    if (structured)
+        sink << structuredToWire(ex.toJSON());
+    sink << 0 // FIXME: info.errPos
          << info.traces.size();
     for (auto & trace : info.traces) {
         sink << 0; // FIXME: trace.pos
         sink << trace.hint.str();
+        if (structured)
+            sink << structuredToWire(trace.data ? std::optional{*trace.data} : std::nullopt);
     }
-    return sink;
 }
 
 void readPadding(size_t len, Source & source)
@@ -643,7 +663,7 @@ T readStrings(Source & source)
 template Strings readStrings(Source & source);
 template StringSet readStrings(Source & source);
 
-UnstructuredError readError(Source & source)
+RemoteError readError(Source & source, bool structured)
 {
     auto type = readString(source);
     if (type != "Error")
@@ -651,6 +671,9 @@ UnstructuredError readError(Source & source)
     auto level = verbosityFromIntClamped(readInt(source));
     [[maybe_unused]] auto name = readString(source); // removed
     auto msg = readString(source);
+    std::shared_ptr<const nlohmann::json> data;
+    if (structured)
+        data = structuredFromWire(readString(source));
     ErrorInfo info{
         .level = level,
     };
@@ -662,9 +685,12 @@ UnstructuredError readError(Source & source)
         havePos = readNum<size_t>(source);
         if (havePos != 0)
             throw SerialisationError("deserializing error positions is not supported");
-        info.traces.push_back(Trace{.hint = HintFmt(readString(source))});
+        Trace trace{.hint = HintFmt(readString(source))};
+        if (structured)
+            trace.data = structuredFromWire(readString(source));
+        info.traces.push_back(std::move(trace));
     }
-    return UnstructuredError(std::move(info), HintFmt(msg));
+    return RemoteError(std::move(info), HintFmt(msg), std::move(data));
 }
 
 void StringSink::operator()(std::string_view data)

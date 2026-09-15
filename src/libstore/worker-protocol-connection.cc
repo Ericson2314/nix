@@ -68,7 +68,8 @@ WorkerProto::BasicClientConnection::processStderrReturn(Sink * sink, Source * so
 
         else if (msg == STDERR_ERROR) {
             if (protoVersion >= WorkerProto::Version{.number = {1, 26}}) {
-                ex = std::make_exception_ptr(readError(from));
+                ex = std::make_exception_ptr(
+                    readError(from, protoVersion.features.contains(WorkerProto::featureStructuredErrors)));
             } else {
                 auto error = readString(from);
                 unsigned int status = readInt(from);

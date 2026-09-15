@@ -27,6 +27,15 @@ std::optional<nlohmann::json> BaseError::toJSON() const
     return std::nullopt;
 }
 
+void RemoteError::anchor() {}
+
+std::optional<nlohmann::json> RemoteError::toJSON() const
+{
+    if (!structured)
+        return std::nullopt;
+    return *structured;
+}
+
 void UsageError::anchor() {}
 
 void UnimplementedError::anchor() {}

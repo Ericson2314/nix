@@ -225,7 +225,7 @@ void handleChildException(bool sendException)
         if (sendException) {
             writeFull(STDERR_FILENO, "\1\n");
             FdSink sink(STDERR_FILENO);
-            sink << e;
+            writeError(sink, e, /*structured=*/true);
             sink.flush();
         } else
             std::cerr << e.msg();
@@ -568,7 +568,7 @@ void UnixDerivationBuilderImpl::processSandboxSetupMessages()
             break;
         if (msg.substr(0, 1) == "\1") {
             FdSource source(builderOut.get());
-            auto ex = readError(source);
+            auto ex = readError(source, /*structured=*/true);
             ex.addTrace({}, "while setting up the build environment");
             throw std::move(ex);
         }
