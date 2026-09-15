@@ -22,6 +22,8 @@ mkMesonDerivation (finalAttrs: {
     ../../doc/manual/source/protocols/json/schema
     ../../src/libutil-tests/data/memory-source-accessor
     ../../src/libutil-tests/data/hash
+    ../../src/libutil-tests/data/structured-error
+    ../../src/libutil-tests/data/trace-frame
     ../../src/libstore-tests/data/content-address
     ../../src/libstore-tests/data/store-path
     ../../src/libstore-tests/data/realisation

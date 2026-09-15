@@ -1,0 +1,171 @@
+"$schema": "http://json-schema.org/draft-04/schema"
+"$id": "https://nix.dev/manual/nix/latest/protocols/json/schema/error-v1.json"
+title: Structured Error
+description: |
+  The structured content of an error: the facts the error is about, as
+  data rather than as a rendered message.
+
+  An error that has such content carries it in the `structured` field of
+  its `msg` record in the JSON log (`--log-format internal-json`), next to
+  the rendered `raw_msg`, and it crosses the daemon protocol when both
+  ends support the `structured-errors` feature. An error with no
+  structured content has no `structured` field; its message is all there
+  is.
+
+  Every object has a `type` naming the kind of error, which says which
+  other fields to expect. New kinds will be added over time; readers
+  should ignore kinds they do not know.
+
+  > **Warning**
+  >
+  > This JSON format is currently
+  > [**experimental**](@docroot@/development/experimental-features.md#xp-feature-nix-command)
+  > and subject to change.
+
+  ## Version History
+
+  - Version 1: Initial version.
+
+oneOf:
+  - title: Thrown
+    description: "`builtins.throw` was called."
+    type: object
+    properties:
+      type:
+        enum: [throw]
+      message:
+        type: string
+        description: The message the expression threw.
+    required: [type, message]
+    additionalProperties: false
+  - title: Aborted
+    description: "`builtins.abort` was called."
+    type: object
+    properties:
+      type:
+        enum: [abort]
+      message:
+        type: string
+        description: The message the expression aborted with.
+    required: [type, message]
+    additionalProperties: false
+  - title: Undefined Variable
+    type: object
+    properties:
+      type:
+        enum: [undefined-variable]
+      name:
+        type: string
+        description: The variable that is not defined.
+    required: [type, name]
+    additionalProperties: false
+  - title: Missing Argument
+    description: |
+      A function was evaluated as a top-level expression without a value
+      for one of its arguments.
+    type: object
+    properties:
+      type:
+        enum: [missing-argument]
+      name:
+        type: string
+        description: The argument that had no value.
+    required: [type, name]
+    additionalProperties: false
+  - title: Unexpected Type
+    description: A value turned out to be of a different type than was needed.
+    type: object
+    properties:
+      type:
+        enum: [unexpected-type]
+      expected:
+        type: string
+        description: The type that was needed, as `builtins.typeOf` would not quite name it, e.g. `set` or `integer`.
+      found:
+        type: string
+        description: The type the value actually has, in the same terms.
+      value:
+        type: string
+        description: The offending value, printed plainly.
+    required: [type, expected, found, value]
+    additionalProperties: false
+  - title: Assertion Failed
+    description: An `assert` expression whose condition was false.
+    type: object
+    properties:
+      type:
+        enum: [assertion-failed]
+      expression:
+        type: string
+        description: The condition, as source text.
+    required: [type, expression]
+    additionalProperties: false
+  - title: Infinite Recursion
+    type: object
+    properties:
+      type:
+        enum: [infinite-recursion]
+    required: [type]
+    additionalProperties: false
+  - title: Stack Overflow
+    description: Evaluation exceeded `max-call-depth`.
+    type: object
+    properties:
+      type:
+        enum: [stack-overflow]
+    required: [type]
+    additionalProperties: false
+  - title: Invalid Path
+    description: A store path that is not valid in the store.
+    type: object
+    properties:
+      type:
+        enum: [invalid-path]
+      path:
+        type: string
+        description: The store path.
+    required: [type, path]
+    additionalProperties: false
+  - title: Build Failure
+    type: object
+    properties:
+      type:
+        enum: [build-failure]
+      status:
+        type: string
+        description: The failure status, as in a [Build Result](@docroot@/protocols/json/build-result.md).
+      isNonDeterministic:
+        type: boolean
+        description: Whether repeated builds produced different results.
+    required: [type, status, isNonDeterministic]
+    additionalProperties: false
+  - title: System Error
+    description: An operating system call failed.
+    type: object
+    properties:
+      type:
+        enum: [system]
+      category:
+        type: string
+        description: The error category, e.g. `generic` for `errno` values.
+      code:
+        type: integer
+        description: The error code within that category, e.g. the `errno` value.
+      message:
+        type: string
+        description: The system's own description of the error.
+    required: [type, category, code, message]
+    additionalProperties: false
+  - title: File Transfer Failure
+    type: object
+    properties:
+      type:
+        enum: [file-transfer]
+      kind:
+        enum: [not-found, unauthorized, forbidden, transient, misc]
+        description: What went wrong, as far as it was classified.
+      response:
+        type: string
+        description: The response body, when there was one and it was small enough to keep.
+    required: [type, kind]
+    additionalProperties: false

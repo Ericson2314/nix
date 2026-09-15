@@ -240,6 +240,34 @@ schemas += [
   },
 ]
 
+# Structured errors and their trace frames
+schemas += [
+  {
+    'stem' : 'structured-error',
+    'schema' : schema_dir / 'error-v1.yaml',
+    'files' : [
+      'throw.json',
+      'undefined-variable.json',
+      'unexpected-type.json',
+      'assertion-failed.json',
+      'build-failure.json',
+      'system.json',
+      'file-transfer.json',
+    ],
+  },
+  {
+    'stem' : 'trace-frame',
+    'schema' : schema_dir / 'trace-frame-v1.yaml',
+    'files' : [
+      'calling-builtin.json',
+      'calling-function.json',
+      'evaluating-builtin-argument.json',
+      'evaluating-operand.json',
+      'evaluating-attribute.json',
+    ],
+  },
+]
+
 # Validate each example against the schema
 foreach schema : schemas
   stem = schema['stem']

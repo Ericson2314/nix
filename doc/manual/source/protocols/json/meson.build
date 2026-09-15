@@ -22,6 +22,8 @@ schemas = [
   'build-trace-entry-v3',
   'build-result-v1',
   'store-v1',
+  'error-v1',
+  'trace-frame-v1',
 ]
 
 schema_files = files()

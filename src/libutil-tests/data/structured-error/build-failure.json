@@ -1,0 +1,5 @@
+{
+  "type": "build-failure",
+  "status": "NotDeterministic",
+  "isNonDeterministic": true
+}

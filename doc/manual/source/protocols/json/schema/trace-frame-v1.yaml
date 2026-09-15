@@ -1,0 +1,136 @@
+"$schema": "http://json-schema.org/draft-04/schema"
+"$id": "https://nix.dev/manual/nix/latest/protocols/json/schema/trace-frame-v1.json"
+title: Structured Trace Frame
+description: |
+  The structured content of one frame of an error's trace: what was
+  going on when the error happened, as data rather than as the rendered
+  "while ..." line.
+
+  A frame that has such content carries it in the `structured` field of
+  its entry in the `trace` array of the error's `msg` record in the JSON
+  log, next to the frame's rendered `raw_msg`. Frames without one have no
+  `structured` field. As with [errors](@docroot@/protocols/json/error.md),
+  every object has a `type` naming the kind of frame, new kinds will be
+  added over time, and readers should ignore kinds they do not know.
+
+  > **Warning**
+  >
+  > This JSON format is currently
+  > [**experimental**](@docroot@/development/experimental-features.md#xp-feature-nix-command)
+  > and subject to change.
+
+  ## Version History
+
+  - Version 1: Initial version.
+
+oneOf:
+  - title: Calling a builtin
+    type: object
+    properties:
+      type:
+        enum: [calling-builtin]
+      name:
+        type: string
+        description: The builtin's name, without the `builtins.` prefix.
+    required: [type, name]
+    additionalProperties: false
+  - title: Calling a function
+    type: object
+    properties:
+      type:
+        enum: [calling-function]
+      name:
+        type: [string, "null"]
+        description: The function's name, or `null` for an anonymous one.
+    required: [type, name]
+    additionalProperties: false
+  - title: Calling a functor
+    description: Calling an attribute set with a `__functor` attribute.
+    type: object
+    properties:
+      type:
+        enum: [calling-functor]
+    required: [type]
+    additionalProperties: false
+  - title: Call site
+    description: Marks the position a function was called from.
+    type: object
+    properties:
+      type:
+        enum: [call-site]
+    required: [type]
+    additionalProperties: false
+  - title: Evaluating an argument of a builtin
+    type: object
+    properties:
+      type:
+        enum: [evaluating-builtin-argument]
+      builtin:
+        type: string
+        description: The builtin's name, without the `builtins.` prefix.
+      argument:
+        type: integer
+        minimum: 1
+        description: Which argument, counting from 1.
+    required: [type, builtin, argument]
+    additionalProperties: false
+  - title: Evaluating an operand
+    type: object
+    properties:
+      type:
+        enum: [evaluating-operand]
+      operator:
+        type: string
+        description: The operator, e.g. `&&`.
+      side:
+        enum: [left, right]
+    required: [type, operator, side]
+    additionalProperties: false
+  - title: Evaluating an attribute
+    type: object
+    properties:
+      type:
+        enum: [evaluating-attribute]
+      attribute:
+        type: string
+        description: The attribute, or an attribute path like `a.b.c` when that is what is being selected.
+    required: [type, attribute]
+    additionalProperties: false
+  - title: From the definition of an attribute
+    type: object
+    properties:
+      type:
+        enum: [attribute-definition]
+      attribute:
+        type: string
+    required: [type, attribute]
+    additionalProperties: false
+  - title: Evaluating a derivation attribute
+    type: object
+    properties:
+      type:
+        enum: [evaluating-derivation-attribute]
+      attribute:
+        type: string
+        description: The attribute, e.g. `name` or `meta`.
+    required: [type, attribute]
+    additionalProperties: false
+  - title: Evaluating the condition of an assertion
+    type: object
+    properties:
+      type:
+        enum: [evaluating-assertion-condition]
+      expression:
+        type: string
+        description: The condition, as source text.
+    required: [type, expression]
+    additionalProperties: false
+  - title: Evaluating a file
+    type: object
+    properties:
+      type:
+        enum: [evaluating-file]
+      path:
+        type: string
+    required: [type, path]
+    additionalProperties: false
